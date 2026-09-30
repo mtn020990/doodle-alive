@@ -1,0 +1,57 @@
+:root {
+  --bg: #fffaf2;
+  --ink: #1f1b16;
+  --muted: #6b6258;
+  --accent: #ff6b35;
+  --card: #ffffff;
+  --line: #eadfce;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { margin: 0; font-size: 2rem; }
+.lead { color: var(--muted); margin-top: 4px; }
+
+form { display: grid; gap: 16px; }
+.capture {
+  display: grid; place-items: center; min-height: 200px;
+  border: 2px dashed var(--line); border-radius: 16px; background: var(--card);
+  cursor: pointer; text-align: center; padding: 16px; overflow: hidden;
+}
+.capture input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.capture img { max-width: 100%; max-height: 320px; border-radius: 8px; }
+
+fieldset { border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; }
+.prompt { display: grid; gap: 6px; }
+.prompt input {
+  font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+}
+
+button, .button {
+  font: inherit; font-weight: 600; border: 0; border-radius: 12px;
+  padding: 14px 18px; background: var(--accent); color: white; cursor: pointer;
+  text-align: center; text-decoration: none;
+}
+button:disabled { opacity: 0.5; cursor: wait; }
+.secondary { background: var(--line); color: var(--ink); }
+
+#status { display: flex; gap: 12px; align-items: center; margin-top: 24px; }
+.spinner {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error { margin-top: 24px; padding: 12px; border-radius: 10px; background: #fde2e1; color: #8a1c14; }
+.warning { padding: 10px; border-radius: 10px; background: #fff3cd; color: #6b4e00; font-size: 0.9rem; }
+#result { margin-top: 24px; display: grid; gap: 12px; }
+#media img, #media video { width: 100%; border-radius: 12px; background: white; }
+.meta { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

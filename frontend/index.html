@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doodle Alive</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <h1>Doodle Alive</h1>
+    <p class="lead">Draw something, snap a photo, and watch it move.</p>
+
+    <form id="form">
+      <label class="capture">
+        <input id="photo" type="file" accept="image/*" capture="environment" required>
+        <span id="captureLabel">📷 Take a photo of your drawing</span>
+        <img id="preview" alt="Your drawing" hidden>
+      </label>
+
+      <fieldset>
+        <legend>What did you draw?</legend>
+        <label><input type="radio" name="mode" value="auto" checked> Let AI decide</label>
+        <label><input type="radio" name="mode" value="character"> A person / figure</label>
+        <label><input type="radio" name="mode" value="scene"> Anything else</label>
+      </fieldset>
+
+      <label class="prompt">
+        How should it move? <small>(optional)</small>
+        <input id="prompt" type="text" placeholder="e.g. the rocket blasts off into space">
+      </label>
+
+      <button id="submit" type="submit">Bring it to life ✨</button>
+    </form>
+
+    <section id="status" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="statusText">Uploading…</p>
+    </section>
+
+    <section id="error" class="error" hidden></section>
+
+    <section id="result" hidden>
+      <p id="warning" class="warning" hidden></p>
+      <div id="media"></div>
+      <p id="meta" class="meta"></p>
+      <div class="actions">
+        <a id="download" class="button" download>Save</a>
+        <button id="again" type="button" class="secondary">Draw another</button>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
