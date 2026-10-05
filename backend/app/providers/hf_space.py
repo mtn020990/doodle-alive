@@ -20,8 +20,12 @@ log = logging.getLogger(__name__)
 
 class HfSpaceAnimator:
     name = "hf_space"
+    takes_duration = True
 
-    def animate(self, image_path: Path, prompt: str, out_dir: Path) -> Path:
+    def animate(self, image_path: Path, prompt: str, out_dir: Path, duration: float | None = None) -> Path:
+        self._duration = duration
+        if duration:
+            note(f"Length: {duration:g} s")
         try:
             return self._animate_with_hf_keys(image_path, prompt, out_dir)
         except Exception as hf_error:
@@ -71,6 +75,8 @@ class HfSpaceAnimator:
             settings.hf_prompt_param: prompt,
             **settings.hf_extra_params,
         }
+        if getattr(self, "_duration", None):
+            kwargs[settings.hf_duration_param] = self._duration
         result = client.predict(api_name=settings.hf_api_name, **kwargs)
         video_path = _find_file(result)
         if video_path is None:

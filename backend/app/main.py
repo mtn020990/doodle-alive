@@ -19,6 +19,7 @@ from .jobs import create_job, get_job, run_job
 logging.basicConfig(level=logging.INFO)
 
 ALLOWED_MODES = {"auto", "character", "scene"}
+MIN_DURATION, MAX_DURATION = 1, 10  # seconds of AI video
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 
 settings.uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -58,9 +59,12 @@ async def submit_job(
     image: UploadFile = File(...),
     mode: str = Form("auto"),
     prompt: str | None = Form(None),
+    duration: float | None = Form(None),  # optional; absent = the video model's default length
 ) -> dict:
     if mode not in ALLOWED_MODES:
         raise HTTPException(400, f"mode must be one of {sorted(ALLOWED_MODES)}")
+    if duration is not None and not MIN_DURATION <= duration <= MAX_DURATION:
+        raise HTTPException(400, f"duration must be between {MIN_DURATION} and {MAX_DURATION} seconds")
     if not (image.content_type or "").startswith("image/"):
         raise HTTPException(400, "Please upload an image")
     data = await image.read()
@@ -71,6 +75,7 @@ async def submit_job(
     upload_path.write_bytes(data)
 
     job = create_job(mode)
+    job.duration = duration
     background.add_task(run_job, job, upload_path, (prompt or "").strip() or None)
     return job.to_dict()
 

@@ -33,6 +33,7 @@ class Job:
     output_url: str | None = None
     warning: str | None = None    # e.g. real model failed, mock used instead
     error: str | None = None
+    duration: float | None = None  # requested video length in seconds (AI video only)
     steps: list[Step] = field(default_factory=list)  # pipeline trace for the UI flow chart
 
     def to_dict(self) -> dict:
@@ -80,6 +81,9 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None) -> None:
             current.outputs = {"mode": f"{job.kind} ({why})", "animator": _animator_label(name)}
             if user_prompt:
                 current.outputs["motion prompt"] = f"{user_prompt} (yours)"
+            if job.duration:
+                current.outputs["length"] = (f"{job.duration:g} s" if job.kind == "scene"
+                                             else f"{job.duration:g} s if it falls back to AI video (dances have a fixed length)")
 
         output = _animate_with_fallback(job, name, clean, out_dir)
 
@@ -108,7 +112,10 @@ def _animate_with_fallback(job: Job, name: str, image: Path, out_dir: Path) -> P
         job.step = f"Animating ({candidate})"
         try:
             with step(job.steps, "🎬", "Animate" if i == 0 else "Fallback: animate", _animator_label(candidate)):
-                output = get_animator(candidate).animate(image, job.prompt or "", out_dir)
+                animator = get_animator(candidate)
+                # Only video models take a length; the dance and mock animators have a fixed one.
+                options = {"duration": job.duration} if job.duration and getattr(animator, "takes_duration", False) else {}
+                output = animator.animate(image, job.prompt or "", out_dir, **options)
         except Exception as exc:
             if candidate == "mock":
                 raise

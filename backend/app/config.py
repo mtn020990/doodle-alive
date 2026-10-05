@@ -35,6 +35,8 @@ class Settings:
     hf_image_param: str = field(default_factory=lambda: _env("HF_IMAGE_PARAM", "input_image_filepath"))
     hf_prompt_param: str = field(default_factory=lambda: _env("HF_PROMPT_PARAM", "prompt"))
     hf_extra_params: dict = field(default_factory=lambda: json.loads(_env("HF_EXTRA_PARAMS") or "{}"))
+    # The Space's video-length parameter (seconds); a length chosen on the page overrides HF_EXTRA_PARAMS.
+    hf_duration_param: str = field(default_factory=lambda: _env("HF_DURATION_PARAM", "duration_ui"))
 
     ad_repo_dir: str = field(default_factory=lambda: _env("AD_REPO_DIR"))
     ad_python: str = field(default_factory=lambda: _env("AD_PYTHON", "python"))

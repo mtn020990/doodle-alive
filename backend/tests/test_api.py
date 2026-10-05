@@ -323,3 +323,67 @@ def test_character_prompt_is_sent_as_motion(monkeypatch):
     job = client.get(f"/api/jobs/{res.json()['id']}").json()
     assert sent == {"motion": "wave_hello"}
     assert 'wave_hello (from "wave" in the prompt)' in job["steps"][3]["notes"][0]
+
+
+def test_duration_must_be_1_to_10_seconds():
+    for bad in ("0", "11", "-3"):
+        res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                          data={"mode": "scene", "duration": bad})
+        assert res.status_code == 400, bad
+
+
+def test_duration_reaches_video_model_but_not_others(monkeypatch):
+    from app import providers
+    from app.config import settings
+
+    got = {}
+
+    class FakeVideo:
+        name = "fake_video"
+        takes_duration = True
+
+        def animate(self, image_path, prompt, out_dir, duration=None):
+            got["duration"] = duration
+            out = out_dir / "animation.mp4"
+            out.write_bytes(b"video")
+            return out
+
+    monkeypatch.setitem(providers.PROVIDERS, "fake_video", FakeVideo)
+    monkeypatch.setattr(settings, "scene_animator", "fake_video")
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "duration": "5"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert got == {"duration": 5.0} and job["duration"] == 5.0
+    assert job["steps"][2]["outputs"]["length"] == "5 s"
+
+    # mock has no takes_duration: called without it, and the job still succeeds
+    monkeypatch.setattr(settings, "scene_animator", "mock")
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "duration": "8"})
+    assert client.get(f"/api/jobs/{res.json()['id']}").json()["status"] == "done"
+
+
+def test_hf_space_sends_duration_as_space_parameter(monkeypatch):
+    import gradio_client
+
+    from app.providers.hf_space import HfSpaceAnimator
+
+    _fresh_pool(monkeypatch)  # no keys: anonymous call
+    sent = {}
+
+    class FakeClient:
+        def __init__(self, space, token=None):
+            pass
+
+        def predict(self, api_name, **kwargs):
+            sent.update(kwargs)
+            path = Path(tempfile.mkdtemp()) / "v.mp4"
+            path.write_bytes(b"video")
+            return (str(path), 1)
+
+    monkeypatch.setattr(gradio_client, "Client", FakeClient)
+    monkeypatch.setattr(gradio_client, "handle_file", lambda p: p)
+    img = Path(tempfile.mkdtemp()) / "in.png"
+    img.write_bytes(_drawing_png())
+    HfSpaceAnimator().animate(img, "p", Path(tempfile.mkdtemp()), duration=7)
+    assert sent["duration_ui"] == 7

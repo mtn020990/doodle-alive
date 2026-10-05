@@ -26,6 +26,7 @@ form.addEventListener('submit', async (event) => {
   body.append('mode', form.elements.mode.value);
   const prompt = $('prompt').value.trim();
   if (prompt) body.append('prompt', prompt);
+  if (!$('durationBox').hidden) body.append('duration', $('duration').value);
 
   setBusy(true, 'Uploading…');
   try {
@@ -51,7 +52,14 @@ function updatePromptHelp() {
   const [placeholder, hint] = PROMPT_HELP[form.elements.mode.value] || PROMPT_HELP.scene;
   $('prompt').placeholder = placeholder;
   $('promptHint').textContent = hint;
+  // Dances have a fixed length, so the slider only shows when the result can be an AI video.
+  $('durationBox').hidden = form.elements.mode.value === 'character';
+  $('durationValue').textContent = `${$('duration').value} s`;
 }
+
+$('duration').addEventListener('input', () => {
+  $('durationValue').textContent = `${$('duration').value} s`;
+});
 
 form.addEventListener('change', (event) => {
   if (event.target.name === 'mode') updatePromptHelp();

@@ -30,6 +30,8 @@ form { display: grid; gap: 16px; }
 
 fieldset { border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; }
 .prompt { display: grid; gap: 6px; }
+.duration { display: grid; gap: 4px; }
+.duration input { width: 100%; accent-color: var(--accent); }
 .prompt input {
   font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
 }
