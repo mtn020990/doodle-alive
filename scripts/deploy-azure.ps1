@@ -74,7 +74,10 @@ function Initialize-Shared {
     # A provider that is not registered makes create calls fail with a misleading "SubscriptionNotFound".
     Write-Host '== Resource providers (first run takes a few minutes)'
     foreach ($ns in 'Microsoft.Storage', 'Microsoft.App', 'Microsoft.OperationalInsights', 'Microsoft.ContainerRegistry') {
-        Invoke-Az provider register -n $ns --wait -o none
+        # Only when needed: re-registering on every run is slow and sometimes fails transiently.
+        if ((Invoke-Az provider show -n $ns --query registrationState -o tsv) -ne 'Registered') {
+            Invoke-Az provider register -n $ns --wait -o none
+        }
     }
 
     Write-Host "== Resource group $ResourceGroup ($Location)"
