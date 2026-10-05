@@ -16,7 +16,7 @@ photo.addEventListener('change', () => {
   $('captureLabel').hidden = true;
 });
 
-let draft = null; // the prompt under review: { kind, subject }
+let draft = null; // the prompt under review: { kind, subject, motion }
 let lastJob = null; // for "Edit prompt & remake"
 
 form.addEventListener('submit', (event) => {
@@ -80,6 +80,7 @@ $('reviewGo').addEventListener('click', () => {
     mode: draft.kind,
     final_prompt: finalPrompt,
     subject: draft.subject,
+    motion: draft.kind === 'character' ? draft.motion : '',
     duration: draft.kind === 'character' ? '' : $('duration').value,
   });
 });
@@ -92,13 +93,15 @@ $('reviewBack').addEventListener('click', () => {
 
 $('reviewPrompt').addEventListener('input', () => {
   if (draft && draft.kind === 'character') {
-    $('reviewMeta').textContent = `${draft.subject} · dance move: picked from words like wave, jump, zombie in your text`;
+    $('reviewMeta').textContent = `${draft.subject} · dance move: a move word you type (wave, jump, zombie…) wins, `
+      + `else ${draft.motion ? draft.motion.replace('_', ' ') : 'random'}`;
   }
 });
 
 $('remake').addEventListener('click', () => {
   if (!lastJob) return;
-  showDraft({ kind: lastJob.kind || 'scene', subject: lastJob.subject || 'your drawing', prompt: lastJob.prompt || '' });
+  showDraft({ kind: lastJob.kind || 'scene', subject: lastJob.subject || 'your drawing', prompt: lastJob.prompt || '',
+    motion: lastJob.motion });
   $('result').hidden = true;
   $('flow').hidden = true;
   $('review').hidden = false;
@@ -130,10 +133,11 @@ async function describe(extra, busyText) {
 }
 
 function showDraft(data) {
-  draft = { kind: data.kind, subject: data.subject };
+  draft = { kind: data.kind, subject: data.subject, motion: data.motion || '' };
   $('reviewPrompt').value = data.prompt;
+  // Figures can only play recorded moves; say which one this text gets, and why.
   const what = data.kind === 'character'
-    ? `dance move: ${data.motion ? data.motion.replace('_', ' ') : 'picked from words like wave, jump, zombie'}`
+    ? `dance move: ${data.motion ? data.motion.replace('_', ' ') : 'random'}${data.motion_reason ? ` (${data.motion_reason})` : ''}`
     : 'AI video';
   $('reviewMeta').textContent = `${data.subject} · ${what}`;
   $('reviewWarning').hidden = !data.warning;
@@ -147,7 +151,7 @@ function setReviewBusy(busy) {
 
 // Figures can only play preset moves; the prompt picks one by keyword (see the backend's MOTION_WORDS).
 const PROMPT_HELP = {
-  character: ['e.g. waves hello', 'Moves: wave, jump, jumping jacks, zombie walk, dab. Anything else picks a random dance.'],
+  character: ['e.g. waves hello', 'Moves: wave, jump, jumping jacks, zombie walk, dab. Other motions (like running) get the closest move, picked by the AI.'],
   auto: ['e.g. waves hello, or the rocket blasts off', 'People get a move (wave, jump, jumping jacks, zombie walk, dab); anything else gets an AI video.'],
   scene: ['e.g. the rocket blasts off into space', 'Describe any motion; the AI video follows it.'],
 };

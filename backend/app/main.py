@@ -17,7 +17,7 @@ from .hf_keys import pool as hf_key_pool
 from .jobs import compose_prompt, create_job, get_job, run_job
 from .preprocess import clean_photo
 from .prompting import MAX_PROMPT_CHARS, describe_drawing
-from .providers.animated_drawings_api import motion_for
+from .providers.animated_drawings_api import MOTIONS, choose_motion
 from .trace import step
 
 logging.basicConfig(level=logging.INFO)
@@ -81,6 +81,7 @@ async def submit_job(
     duration: float | None = Form(None),  # optional; absent = the video model's default length
     final_prompt: str | None = Form(None),  # optional; a prompt reviewed via /api/describe, used as-is
     subject: str | None = Form(None),  # optional; goes with final_prompt, for display
+    motion: str | None = Form(None),  # optional; dance move from /api/describe, for figures
 ) -> dict:
     _check_mode(mode)
     if duration is not None and not MIN_DURATION <= duration <= MAX_DURATION:
@@ -91,7 +92,8 @@ async def submit_job(
     job.duration = duration
     reviewed = (final_prompt or "").strip()[:MAX_PROMPT_CHARS] or None
     background.add_task(run_job, job, upload_path, (prompt or "").strip() or None,
-                        reviewed, (subject or "").strip()[:120] or None)
+                        reviewed, (subject or "").strip()[:120] or None,
+                        motion if motion in MOTIONS else None)
     return job.to_dict()
 
 
@@ -127,7 +129,8 @@ def describe(
     result = {"subject": info.subject, "kind": kind, "prompt": final, "source": info.source,
               "warning": " ".join(warnings) or None}
     if kind == "character":
-        result["motion"] = motion_for(final)[0]
+        typed = final if rewrite else idea  # a reviewed text is the person's own words
+        result["motion"], result["motion_reason"] = choose_motion(typed, info.move, final)
     return result
 
 

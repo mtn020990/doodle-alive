@@ -21,14 +21,19 @@ INSTRUCTIONS = """You are helping animate a hand-drawn picture that was photogra
 Reply with JSON only, no prose, in exactly this shape:
 {"subject": "<what the drawing shows, max 8 words>",
  "kind": "character" | "scene",
- "motion_prompt": "<2-3 sentences for an image-to-video model>"}
+ "motion_prompt": "<2-3 sentences for an image-to-video model>",
+ "move": "dab" | "jumping" | "jumping_jacks" | "wave_hello" | "zombie"}
 
 kind = "character" only if the main subject is a single human-like figure with a
 head, body, two arms and two legs; otherwise "scene".
 motion_prompt: video models follow detailed prompts much better than short ones, so
 name the subject as drawn, then describe clearly and concretely how it moves (e.g. a
 rocket blasts off upward, trailing puffs of smoke). Always keep the hand-drawn style
-and a static camera. Don't add new objects.{idea}"""
+and a static camera. Don't add new objects.
+move: a figure can only play one of these recorded moves, so pick the closest to the
+motion asked for (or that fits): dab = dance pose, jumping = jumps up and down,
+jumping_jacks = star-jump exercise, wave_hello = waves an arm, zombie = slow walk with
+arms out (the only walk). E.g. running or walking -> zombie, celebrating -> jumping.{idea}"""
 
 # The person's own words for the motion, when they typed some.
 IDEA = """
@@ -59,6 +64,7 @@ class DrawingInfo:
     kind: str  # "character" | "scene"
     motion_prompt: str
     source: str  # "claude" | "gemini" | "default"
+    move: str | None = None  # LLM's closest preset dance move, for figures
 
 
 def describe_drawing(
@@ -157,4 +163,5 @@ def _parse_reply(text: str, source: str) -> DrawingInfo:
         kind=kind,
         motion_prompt=str(data.get("motion_prompt") or DEFAULT_PROMPT),
         source=source,
+        move=str(data["move"]) if data.get("move") else None,
     )

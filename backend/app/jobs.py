@@ -15,6 +15,7 @@ from .config import settings
 from .preprocess import clean_photo
 from .prompting import DrawingInfo, describe_drawing
 from .providers import get_animator
+from .providers.animated_drawings_api import choose_motion
 from .trace import Step, note, step
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class Job:
     warning: str | None = None    # e.g. real model failed, mock used instead
     error: str | None = None
     duration: float | None = None  # requested video length in seconds (AI video only)
+    motion: str | None = None  # dance move for figures (AnimatedDrawings plays recorded moves only)
     steps: list[Step] = field(default_factory=list)  # pipeline trace for the UI flow chart
 
     def to_dict(self) -> dict:
@@ -64,8 +66,9 @@ def compose_prompt(info: DrawingInfo, kind: str, user_prompt: str | None) -> str
 
 
 def run_job(job: Job, upload_path: Path, user_prompt: str | None,
-            final_prompt: str | None = None, subject: str | None = None) -> None:
-    """final_prompt: a prompt the person already reviewed on the page; used as-is, no LLM call."""
+            final_prompt: str | None = None, subject: str | None = None, motion: str | None = None) -> None:
+    """final_prompt: a prompt the person already reviewed on the page; used as-is, no LLM call.
+    motion: the dance move suggested while reviewing (a move word in the text still wins)."""
     out_dir = settings.outputs_dir / job.id
     try:
         job.status = "running"
@@ -84,6 +87,7 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None,
                 job.prompt = final_prompt
                 current.outputs = {"subject": job.subject, "kind": job.kind, "your prompt": final_prompt}
                 note("You checked and edited the prompt before animating")
+            typed, suggested = final_prompt, motion  # the whole reviewed text is the person's
         else:
             with step(job.steps, "🧠", "Understand the drawing", _describer_label()) as current:
                 info = describe_drawing(clean, user_prompt)
@@ -101,6 +105,10 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None,
             job.subject = info.subject
             job.kind = job.mode if job.mode in ("character", "scene") else info.kind
             job.prompt = compose_prompt(info, job.kind, user_prompt)
+            typed, suggested = user_prompt, info.move
+        motion_reason = None
+        if job.kind == "character":
+            job.motion, motion_reason = choose_motion(typed, suggested, job.prompt)
 
         name = settings.character_animator if job.kind == "character" else settings.scene_animator
         with step(job.steps, "🔀", "Pick the animator", "Router") as current:
@@ -109,11 +117,13 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None,
             if user_prompt:
                 current.outputs["your idea"] = user_prompt
             current.outputs["final prompt"] = job.prompt
+            if job.motion:
+                current.outputs["dance move"] = f"{job.motion.replace('_', ' ')} ({motion_reason})"
             if job.duration:
                 current.outputs["length"] = (f"{job.duration:g} s" if job.kind == "scene"
                                              else f"{job.duration:g} s if it falls back to AI video (dances have a fixed length)")
 
-        output = _animate_with_fallback(job, name, clean, out_dir)
+        output = _animate_with_fallback(job, name, clean, out_dir, motion_reason)
 
         job.output_url = f"/media/{job.id}/{output.relative_to(out_dir).as_posix()}"
         made_by = job.steps[-1].model  # the Animate step that worked, e.g. "Kaggle GPU (free) · LTX-Video"
@@ -128,7 +138,7 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None,
         job.error = str(exc)
 
 
-def _animate_with_fallback(job: Job, name: str, image: Path, out_dir: Path) -> Path:
+def _animate_with_fallback(job: Job, name: str, image: Path, out_dir: Path, motion_reason: str | None = None) -> Path:
     # The chosen model, then (e.g. AnimatedDrawings found no figure) the scene model, then the offline mock.
     candidates = [name]
     if name != "mock":
@@ -144,6 +154,8 @@ def _animate_with_fallback(job: Job, name: str, image: Path, out_dir: Path) -> P
                 animator = get_animator(candidate)
                 # Only video models take a length; the dance and mock animators have a fixed one.
                 options = {"duration": job.duration} if job.duration and getattr(animator, "takes_duration", False) else {}
+                if job.motion and getattr(animator, "takes_motion", False):
+                    options.update(motion=job.motion, motion_reason=motion_reason)
                 output = animator.animate(image, job.prompt or "", out_dir, **options)
         except Exception as exc:
             if candidate == "mock":

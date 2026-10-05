@@ -326,7 +326,7 @@ def test_character_prompt_is_sent_as_motion(monkeypatch):
                       data={"mode": "character", "prompt": "wave hello"})
     job = client.get(f"/api/jobs/{res.json()['id']}").json()
     assert sent == {"motion": "wave_hello"}
-    assert 'wave_hello (from "wave" in the prompt)' in job["steps"][3]["notes"][0]
+    assert 'wave_hello (from "wave" in your words)' in job["steps"][3]["notes"][0]
 
 
 def test_duration_must_be_1_to_10_seconds():
@@ -496,3 +496,40 @@ def test_job_uses_reviewed_prompt_without_calling_the_llm(monkeypatch):
     assert asked == []
     assert (job["status"], job["prompt"], job["subject"]) == ("done", "The puppy rolls the ball, edited by me.", "a puppy")
     assert job["steps"][1]["model"] == "Reviewed by you"
+
+
+def test_gemini_picks_closest_move_when_no_move_word_is_typed(monkeypatch):
+    import httpx
+
+    from app.config import settings
+
+    reply = ('{"subject": "a boy", "kind": "character", "move": "zombie", '
+             '"motion_prompt": "The boy runs forward in place, pumping his arms."}')
+    sent = {}
+
+    def fake_post(url, **kwargs):
+        if "gemini" in url:
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": reply}]}}]},
+                                  request=httpx.Request("POST", url))
+        sent.update(kwargs["data"])
+        return httpx.Response(200, content=_gif_bytes(), headers={"X-Motion": kwargs["data"]["motion"]},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "character_animator", "animated_drawings_api")
+    monkeypatch.setattr(settings, "ad_service_url", "http://character")
+    monkeypatch.setattr(httpx, "post", fake_post)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "character", "prompt": "a boy is running"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert sent == {"motion": "zombie"} and job["motion"] == "zombie"
+    assert "closest move" in job["steps"][2]["outputs"]["dance move"]
+
+
+def test_typed_move_word_beats_gemini_suggestion():
+    from app.providers.animated_drawings_api import choose_motion
+
+    assert choose_motion("he waves", "zombie", "...")[0] == "wave_hello"
+    assert choose_motion("a boy is running", "zombie", "runs, waving his arms")[0] == "zombie"
+    assert choose_motion(None, None, "the boy jumps")[0] == "jumping"
+    assert choose_motion(None, "not-a-move", "nothing here") == ("random", "no move named in the prompt, so random")
