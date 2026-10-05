@@ -8,15 +8,67 @@ const form = $('form');
 const photo = $('photo');
 const preview = $('preview');
 
-photo.addEventListener('change', () => {
-  const file = photo.files[0];
-  if (!file) return;
+let captured = null; // a photo from the live camera, instead of the file picker
+
+function currentFile() {
+  return captured || photo.files[0];
+}
+
+function showPreview(file) {
   preview.src = URL.createObjectURL(file);
   preview.hidden = false;
   $('captureLabel').hidden = true;
+}
+
+photo.addEventListener('change', () => {
+  const file = photo.files[0];
+  if (!file) return;
+  captured = null;
+  showPreview(file);
 });
 
-let draft = null; // the prompt under review: { kind, subject, motion }
+$('cameraBtn').addEventListener('click', async () => {
+  $('error').hidden = true;
+  try {
+    await Camera.open((file) => {
+      captured = file;
+      photo.value = '';
+      showPreview(file);
+    });
+  } catch (err) {
+    showError(err.message || 'Could not open the camera. Use "Take a photo" instead.');
+  }
+});
+$('cameraCancel').addEventListener('click', () => Camera.close());
+$('cameraSnap').addEventListener('click', () => Camera.snap());
+
+$('photo2').addEventListener('change', () => {
+  const file = $('photo2').files[0];
+  if (!file) return;
+  $('preview2').src = URL.createObjectURL(file);
+  $('preview2').hidden = false;
+  $('photo2Label').hidden = true;
+  $('photo2Remove').hidden = false;
+});
+$('photo2Remove').addEventListener('click', clearSecondDrawing);
+
+function clearSecondDrawing() {
+  $('photo2').value = '';
+  $('preview2').hidden = true;
+  $('photo2Label').hidden = false;
+  $('photo2Remove').hidden = true;
+}
+
+// Fields every request about this drawing carries (/api/jobs and /api/describe).
+function drawingBody() {
+  const body = new FormData();
+  body.append('image', currentFile());
+  if ($('photo2').files[0]) body.append('image2', $('photo2').files[0]);
+  if ($('paint').checked) body.append('paint', 'true');
+  return body;
+}
+
+let draft = null; // the prompt under review: { kind, subject, motion, guesses, sound, music }
 let lastJob = null; // for "Edit prompt & remake"
 
 form.addEventListener('submit', (event) => {
@@ -28,11 +80,13 @@ form.addEventListener('submit', (event) => {
   });
 });
 
-async function startJob(fields) {
-  const file = photo.files[0];
-  if (!file) return showError('Take a photo of your drawing first.');
-  const body = new FormData();
-  body.append('image', file);
+$('photo2').addEventListener('change', updatePromptHelp); // two drawings always make an AI video
+
+async function startJob(fields, guesses = []) {
+  if (!currentFile()) return showError('Take a photo of your drawing first.');
+  Sound.unlock(); // browsers only allow sound after a tap: this is that tap
+  pendingGuesses = guesses;
+  const body = drawingBody();
   for (const [key, value] of Object.entries(fields)) {
     if (value) body.append(key, value);
   }
@@ -53,7 +107,7 @@ async function startJob(fields) {
 // ---- Check the prompt first: the AI writes it, the person edits it, asks for a change or a new idea ----
 
 $('previewBtn').addEventListener('click', async () => {
-  if (!photo.files[0]) return showError('Take a photo of your drawing first.');
+  if (!currentFile()) return showError('Take a photo of your drawing first.');
   if (await describe({}, 'The AI is looking at your drawing…')) {
     form.hidden = true;
     $('review').hidden = false;
@@ -81,8 +135,10 @@ $('reviewGo').addEventListener('click', () => {
     final_prompt: finalPrompt,
     subject: draft.subject,
     motion: draft.kind === 'character' ? draft.motion : '',
-    duration: draft.kind === 'character' ? '' : $('duration').value,
-  });
+    sound: draft.sound,
+    music: draft.music,
+    duration: isDance(draft.kind) ? '' : $('duration').value,
+  }, draft.guesses);
 });
 
 $('reviewBack').addEventListener('click', () => {
@@ -100,8 +156,10 @@ $('reviewPrompt').addEventListener('input', () => {
 
 $('remake').addEventListener('click', () => {
   if (!lastJob) return;
+  Sound.stop();
+  $('game').hidden = true;
   showDraft({ kind: lastJob.kind || 'scene', subject: lastJob.subject || 'your drawing', prompt: lastJob.prompt || '',
-    motion: lastJob.motion });
+    motion: lastJob.motion, guesses: lastJob.guesses, sound: lastJob.sound, music: lastJob.music });
   $('result').hidden = true;
   $('flow').hidden = true;
   $('review').hidden = false;
@@ -109,8 +167,7 @@ $('remake').addEventListener('click', () => {
 
 // Returns true when the review panel got a new prompt.
 async function describe(extra, busyText) {
-  const body = new FormData();
-  body.append('image', photo.files[0]);
+  const body = drawingBody();
   body.append('mode', draft && extra.current ? draft.kind : form.elements.mode.value);
   const idea = $('prompt').value.trim();
   if (idea) body.append('prompt', idea);
@@ -133,12 +190,15 @@ async function describe(extra, busyText) {
 }
 
 function showDraft(data) {
-  draft = { kind: data.kind, subject: data.subject, motion: data.motion || '' };
+  draft = {
+    kind: data.kind, subject: data.subject, motion: data.motion || '',
+    guesses: data.guesses || (draft && draft.guesses) || [], sound: data.sound || '', music: data.music || '',
+  };
   $('reviewPrompt').value = data.prompt;
   // Figures can only play recorded moves; say which one this text gets, and why.
   const what = data.kind === 'character'
     ? `dance move: ${data.motion ? data.motion.replace('_', ' ') : 'random'}${data.motion_reason ? ` (${data.motion_reason})` : ''}`
-    : 'AI video';
+    : data.kind === 'animal' ? 'walks on four legs' : 'AI video';
   $('reviewMeta').textContent = `${data.subject} · ${what}`;
   $('reviewWarning').hidden = !data.warning;
   $('reviewWarning').textContent = data.warning || '';
@@ -153,15 +213,21 @@ function setReviewBusy(busy) {
 const PROMPT_HELP = {
   character: ['e.g. waves hello', 'Moves: wave, jump, jumping jacks, zombie walk, dab. Other motions (like running) get the closest move, picked by the AI.'],
   auto: ['e.g. waves hello, or the rocket blasts off', 'People get a move (wave, jump, jumping jacks, zombie walk, dab); anything else gets an AI video.'],
+  animal: ['e.g. walks across the page', 'Animals walk on four legs. For any other motion, pick "Anything else".'],
   scene: ['e.g. the rocket blasts off into space', 'Describe any motion; the AI video follows it.'],
 };
+
+// Dances and animal walks have a fixed length; only AI video takes the length slider.
+function isDance(kind) {
+  return kind === 'character' || kind === 'animal';
+}
 
 function updatePromptHelp() {
   const [placeholder, hint] = PROMPT_HELP[form.elements.mode.value] || PROMPT_HELP.scene;
   $('prompt').placeholder = placeholder;
   $('promptHint').textContent = hint;
   // Dances have a fixed length, so the slider only shows when the result can be an AI video.
-  $('durationBox').hidden = form.elements.mode.value === 'character';
+  $('durationBox').hidden = isDance(form.elements.mode.value) && !$('photo2').files[0];
   $('durationValue').textContent = `${$('duration').value} s`;
 }
 
@@ -183,7 +249,12 @@ $('again').addEventListener('click', () => {
   $('error').hidden = true;
   $('flow').hidden = true;
   $('review').hidden = true;
+  $('game').hidden = true;
   draft = null;
+  captured = null;
+  clearSecondDrawing();
+  Camera.close();
+  Sound.stop();
   form.hidden = false;
 });
 
@@ -193,6 +264,7 @@ async function poll(jobId) {
     if (!res.ok) throw new Error(await errorText(res));
     const job = await res.json();
     renderFlow(job);
+    showGame(job);
     if (job.status === 'done') return showResult(job);
     if (job.status === 'failed') throw new Error(job.error || 'Animation failed.');
     $('statusText').textContent = job.step || 'Working…';
@@ -202,6 +274,8 @@ async function poll(jobId) {
 
 function showResult(job) {
   lastJob = job;
+  Sound.play(job.sound, job.music);
+  updateSoundToggle();
   const media = $('media');
   media.replaceChildren();
   const outputUrl = API_BASE + job.output_url;
@@ -447,3 +521,67 @@ function savePin(pin) {
 }
 
 initAdmin();
+
+// ---- Sound on/off for results (sound.js) ----
+
+function updateSoundToggle() {
+  $('soundToggle').textContent = Sound.isMuted() ? '🔇 Sound off' : '🔊 Sound on';
+}
+
+$('soundToggle').addEventListener('click', () => {
+  Sound.unlock();
+  Sound.setMuted(!Sound.isMuted());
+  if (!Sound.isMuted() && lastJob) Sound.play(lastJob.sound, lastJob.music);
+  updateSoundToggle();
+});
+
+// ---- "Guess my drawing": while the animation is made, does the AI know what you drew? ----
+
+const SCORE_KEY = 'doodleGameScore';
+let pendingGuesses = []; // from a reviewed prompt; normal jobs bring their own
+let gameJobId = null;
+
+function showGame(job) {
+  const guesses = job.guesses && job.guesses.length ? job.guesses : pendingGuesses;
+  if (!guesses.length || gameJobId === job.id) return;
+  gameJobId = job.id;
+  const choices = $('gameChoices');
+  choices.replaceChildren();
+  for (const [i, guess] of [...guesses, 'Something else'].entries()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = guess;
+    button.addEventListener('click', () => answerGame(i < guesses.length, i === 0, button));
+    choices.append(button);
+  }
+  $('gameResult').hidden = true;
+  $('gameScore').textContent = scoreText(readScore());
+  $('game').hidden = false;
+}
+
+function answerGame(aiKnew, firstGuess, button) {
+  for (const b of $('gameChoices').querySelectorAll('button')) b.disabled = true;
+  button.classList.add('picked');
+  const score = readScore();
+  if (aiKnew) score.ai += 1;
+  else score.you += 1;
+  saveScore(score);
+  $('gameResult').textContent = !aiKnew ? '😜 You fooled the AI!'
+    : firstGuess ? '🎉 The AI got it on the first try!' : '👍 The AI got it, eventually.';
+  $('gameResult').hidden = false;
+  $('gameScore').textContent = scoreText(score);
+}
+
+function scoreText(score) {
+  return `Score on this device: AI ${score.ai} · You ${score.you}`;
+}
+
+// localStorage can throw (private mode): the game then just doesn't keep score.
+function readScore() {
+  try { return JSON.parse(localStorage.getItem(SCORE_KEY)) || { ai: 0, you: 0 }; } catch { return { ai: 0, you: 0 }; }
+}
+
+function saveScore(score) {
+  try { localStorage.setItem(SCORE_KEY, JSON.stringify(score)); } catch { /* not kept */ }
+}

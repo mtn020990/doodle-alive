@@ -110,3 +110,35 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .admin-server { grid-template-columns: 1fr !important; }
 .admin-server form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .admin-server input { font: inherit; font-size: 0.9rem; padding: 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+
+/* Live camera with a paper-shaped guide */
+.camera { margin-top: 16px; display: grid; gap: 12px; }
+.camera-view { position: relative; border-radius: 16px; overflow: hidden; background: #000; }
+.camera-view video { display: block; width: 100%; max-height: 70vh; object-fit: cover; }
+.camera-guide {
+  position: absolute; inset: 8% 12%; border: 3px dashed rgba(255, 255, 255, 0.9); border-radius: 10px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+}
+.camera-hint {
+  position: absolute; left: 0; right: 0; bottom: 12px; margin: 0; text-align: center;
+  color: white; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Second drawing and the paint option */
+.second { display: grid; gap: 4px; }
+.second-pick {
+  display: grid; place-items: center; min-height: 64px; padding: 10px; text-align: center; cursor: pointer;
+  border: 2px dashed var(--line); border-radius: 12px; background: var(--card);
+}
+.second-pick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.second-pick img { max-width: 100%; max-height: 160px; border-radius: 8px; }
+.toggle { display: flex; gap: 8px; align-items: baseline; }
+
+/* Guess my drawing */
+.game { margin-top: 16px; padding: 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); display: grid; gap: 10px; }
+.game h2 { margin: 0; font-size: 1.1rem; }
+.game-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.game-choices button { padding: 10px; }
+.game-choices button.picked { background: var(--accent); color: white; }
+.game-result { margin: 0; font-size: 1.2rem; font-weight: 700; }
+.game .meta { margin: 0; }

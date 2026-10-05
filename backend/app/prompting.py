@@ -6,7 +6,7 @@ is set, else a generic prompt, so the rest of the pipeline never depends on it.
 import base64
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import settings
@@ -20,12 +20,17 @@ DEFAULT_PROMPT = f"The hand-drawn picture comes to life with gentle, playful mot
 INSTRUCTIONS = """You are helping animate a hand-drawn picture that was photographed with a phone.
 Reply with JSON only, no prose, in exactly this shape:
 {"subject": "<what the drawing shows, max 8 words>",
- "kind": "character" | "scene",
+ "guesses": ["<3 different short guesses of what it is, best first, max 4 words each>"],
+ "kind": "character" | "animal" | "scene",
  "motion_prompt": "<2-3 sentences for an image-to-video model>",
- "move": "dab" | "jumping" | "jumping_jacks" | "wave_hello" | "zombie"}
+ "move": "dab" | "jumping" | "jumping_jacks" | "wave_hello" | "zombie",
+ "sound": "whoosh" | "boing" | "sparkle" | "splash" | "roar" | "beep" | "none",
+ "music": "happy" | "spooky" | "epic" | "calm"}
 
 kind = "character" only if the main subject is a single human-like figure with a
-head, body, two arms and two legs; otherwise "scene".
+head, body, two arms and two legs; "animal" only if it is a single four-legged animal
+(dog, cat, horse...) seen from the side; otherwise "scene".
+sound: the one sound effect that fits the motion best; music: the mood of the drawing.
 motion_prompt: video models follow detailed prompts much better than short ones, so
 name the subject as drawn, then describe clearly and concretely how it moves (e.g. a
 rocket blasts off upward, trailing puffs of smoke). Always keep the hand-drawn style
@@ -54,7 +59,15 @@ The current motion_prompt is: "{current}"
 Write a clearly different, fun take on the motion (still fitting the drawing and the
 person's idea, if any). Don't reuse its wording."""
 
+# Two drawings side by side in one picture.
+PAIR = """
+
+The picture shows two separate drawings side by side. Treat them as one scene and make
+them meet and interact in the motion_prompt (e.g. the dog runs over and catches the ball)."""
+
 MAX_IDEA_CHARS = 300
+SOUNDS = {"whoosh", "boing", "sparkle", "splash", "roar", "beep"}
+MUSIC_MOODS = {"happy", "spooky", "epic", "calm"}
 MAX_PROMPT_CHARS = 1500
 
 
@@ -65,6 +78,9 @@ class DrawingInfo:
     motion_prompt: str
     source: str  # "claude" | "gemini" | "default"
     move: str | None = None  # LLM's closest preset dance move, for figures
+    guesses: list[str] = field(default_factory=list)  # "Guess my drawing" game, best first
+    sound: str | None = None  # sound effect the page plays with the result
+    music: str | None = None  # music mood the page plays with the result
 
 
 def describe_drawing(
@@ -73,6 +89,7 @@ def describe_drawing(
     current: str | None = None,
     change: str | None = None,
     different: bool = False,
+    pair: bool = False,
 ) -> DrawingInfo:
     """user_idea: the motion the person typed; the LLM expands it instead of inventing one.
     current + change: rewrite the current prompt with that change; current + different: a new take.
@@ -94,7 +111,8 @@ def describe_drawing(
         return DrawingInfo("a drawing", "scene", fallback, "default")
     # replace(), not format(): the instructions contain JSON braces.
     quote = lambda text: text.replace('"', "'")
-    extra = IDEA.replace("{text}", quote(idea)) if idea else ""
+    extra = PAIR if pair else ""
+    extra += IDEA.replace("{text}", quote(idea)) if idea else ""
     if current and change:
         extra += CHANGE.replace("{current}", quote(current)).replace("{change}", quote(change))
     elif current and different:
@@ -157,11 +175,15 @@ def _ask_gemini(image_path: Path, instructions: str, creative: bool = False) -> 
 
 def _parse_reply(text: str, source: str) -> DrawingInfo:
     data = json.loads(text[text.find("{"): text.rfind("}") + 1])
-    kind = "character" if data.get("kind") == "character" else "scene"
+    kind = data.get("kind") if data.get("kind") in ("character", "animal") else "scene"
+    pick = lambda key, allowed: data.get(key) if data.get(key) in allowed else None
     return DrawingInfo(
         subject=str(data.get("subject") or "a drawing"),
         kind=kind,
         motion_prompt=str(data.get("motion_prompt") or DEFAULT_PROMPT),
         source=source,
         move=str(data["move"]) if data.get("move") else None,
+        guesses=[str(g)[:40] for g in (data.get("guesses") or []) if g][:3],
+        sound=pick("sound", SOUNDS),
+        music=pick("music", MUSIC_MOODS),
     )

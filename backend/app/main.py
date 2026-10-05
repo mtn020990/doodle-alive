@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import secrets
+import shutil
 import uuid
 from pathlib import Path
 
@@ -14,15 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .gpu_servers import servers as gpu_servers
 from .hf_keys import pool as hf_key_pool
-from .jobs import compose_prompt, create_job, get_job, run_job
-from .preprocess import clean_photo
-from .prompting import MAX_PROMPT_CHARS, describe_drawing
+from .jobs import JobOptions, compose_prompt, create_job, get_job, prepare_drawing, run_job
+from .prompting import MAX_PROMPT_CHARS, MUSIC_MOODS, SOUNDS, describe_drawing
 from .providers.animated_drawings_api import MOTIONS, choose_motion
 from .trace import step
 
 logging.basicConfig(level=logging.INFO)
 
-ALLOWED_MODES = {"auto", "character", "scene"}
+ALLOWED_MODES = {"auto", "character", "animal", "scene"}
 MIN_DURATION, MAX_DURATION = 1, 10  # seconds of AI video
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 
@@ -82,18 +82,30 @@ async def submit_job(
     final_prompt: str | None = Form(None),  # optional; a prompt reviewed via /api/describe, used as-is
     subject: str | None = Form(None),  # optional; goes with final_prompt, for display
     motion: str | None = Form(None),  # optional; dance move from /api/describe, for figures
+    sound: str | None = Form(None),  # optional; goes with final_prompt
+    music: str | None = Form(None),  # optional; goes with final_prompt
+    image2: UploadFile | None = File(None),  # optional; a second drawing, combined into one scene
+    paint: bool = Form(False),  # optional; fill closed shapes with crayon colours first
 ) -> dict:
     _check_mode(mode)
     if duration is not None and not MIN_DURATION <= duration <= MAX_DURATION:
         raise HTTPException(400, f"duration must be between {MIN_DURATION} and {MAX_DURATION} seconds")
     upload_path = _save_upload(image, await image.read())
+    second_path = _save_upload(image2, await image2.read()) if image2 and image2.filename else None
 
     job = create_job(mode)
     job.duration = duration
-    reviewed = (final_prompt or "").strip()[:MAX_PROMPT_CHARS] or None
-    background.add_task(run_job, job, upload_path, (prompt or "").strip() or None,
-                        reviewed, (subject or "").strip()[:120] or None,
-                        motion if motion in MOTIONS else None)
+    options = JobOptions(
+        user_prompt=(prompt or "").strip() or None,
+        final_prompt=(final_prompt or "").strip()[:MAX_PROMPT_CHARS] or None,
+        subject=(subject or "").strip()[:120] or None,
+        motion=motion if motion in MOTIONS else None,
+        sound=sound if sound in SOUNDS else None,
+        music=music if music in MUSIC_MOODS else None,
+        second_image=second_path,
+        paint=paint,
+    )
+    background.add_task(run_job, job, upload_path, options)
     return job.to_dict()
 
 
@@ -105,21 +117,27 @@ def describe(
     current: str | None = Form(None),  # the prompt shown on the page, for change / different
     change: str | None = Form(None),  # e.g. "the ball rolls on the ground"
     different: bool = Form(False),  # write a new take on `current`
+    image2: UploadFile | None = File(None),  # as on /api/jobs
+    paint: bool = Form(False),  # as on /api/jobs
 ) -> dict:
     """Write (or rewrite) the motion prompt so the person can review it before animating."""
     _check_mode(mode)
     upload_path = _save_upload(image, image.file.read())
-    clean_path = upload_path.with_name(f"{upload_path.stem}-clean.png")
+    second_path = _save_upload(image2, image2.file.read()) if image2 and image2.filename else None
+    work_dir = settings.uploads_dir / f"describe-{uuid.uuid4().hex}"
     trace: list = []
     try:
-        clean_photo(upload_path, clean_path)
+        drawing = prepare_drawing(upload_path, work_dir, trace, second_path, paint)
         with step(trace, "🧠", "describe") as current_step:
             idea = (prompt or "").strip() or None
-            info = describe_drawing(clean_path, idea, current=current, change=change, different=different)
+            info = describe_drawing(drawing, idea, current=current, change=change, different=different,
+                                    pair=bool(second_path))
     finally:
-        upload_path.unlink(missing_ok=True)
-        clean_path.unlink(missing_ok=True)
-    kind = mode if mode in ("character", "scene") else info.kind
+        for path in (upload_path, second_path):
+            if path:
+                path.unlink(missing_ok=True)
+        shutil.rmtree(work_dir, ignore_errors=True)
+    kind = "scene" if second_path else (mode if mode in ("character", "animal", "scene") else info.kind)
     rewrite = bool((current or "").strip() and (change or different))
     # A rewrite of the reviewed text replaces it as-is; a first description gets composed like a job's.
     final = info.motion_prompt if rewrite else compose_prompt(info, kind, idea)
@@ -127,7 +145,8 @@ def describe(
     if different and info.source == "default":
         warnings.append("A different idea needs Gemini, so the prompt is unchanged")
     result = {"subject": info.subject, "kind": kind, "prompt": final, "source": info.source,
-              "warning": " ".join(warnings) or None}
+              "warning": " ".join(warnings) or None,
+              "guesses": info.guesses, "sound": info.sound, "music": info.music}
     if kind == "character":
         typed = final if rewrite else idea  # a reviewed text is the person's own words
         result["motion"], result["motion_reason"] = choose_motion(typed, info.move, final)

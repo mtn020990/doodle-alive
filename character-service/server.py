@@ -18,14 +18,17 @@ import requests
 from flask import Flask, Response, jsonify, request
 
 AD_ROOT = Path("/opt/AnimatedDrawings")
-# motion -> retarget config for its skeleton (fair1 BVH files -> fair1_ppf, cmu1 -> cmu1_pfp)
+# move -> (motion config, retarget config for its skeleton: fair1 BVH -> fair1_ppf, cmu1 -> cmu1_pfp)
 MOTIONS = {
-    "dab": "fair1_ppf",
-    "jumping": "fair1_ppf",
-    "wave_hello": "fair1_ppf",
-    "zombie": "fair1_ppf",
-    "jumping_jacks": "cmu1_pfp",
+    "dab": ("dab", "fair1_ppf"),
+    "jumping": ("jumping", "fair1_ppf"),
+    "wave_hello": ("wave_hello", "fair1_ppf"),
+    "zombie": ("zombie", "fair1_ppf"),
+    "jumping_jacks": ("jumping_jacks", "cmu1_pfp"),
+    # Four-legged animals: the repo's quadruped extension (examples/quadruped) walks them with zombie.
+    "animal_walk": ("zombie", "four_legs"),
 }
+HUMAN_MOTIONS = sorted(m for m in MOTIONS if m != "animal_walk")  # what "random" picks from
 
 app = Flask(__name__)
 _render_lock = threading.Lock()  # one render at a time: CPU-bound, keeps memory predictable
@@ -47,7 +50,7 @@ def animate():
         return jsonify(error="image is required"), 400
     motion = request.form.get("motion") or "random"
     if motion == "random":
-        motion = random.choice(sorted(MOTIONS))
+        motion = random.choice(HUMAN_MOTIONS)
     if motion not in MOTIONS:
         return jsonify(error=f"motion must be one of {sorted(MOTIONS)} or random"), 400
 
@@ -56,7 +59,7 @@ def animate():
         image_path = work / "input.png"
         image.save(str(image_path))
         char_dir = work / "char"
-        cmd = [sys.executable, "/app/render_job.py", str(image_path), str(char_dir), motion, MOTIONS[motion]]
+        cmd = [sys.executable, "/app/render_job.py", str(image_path), str(char_dir), *MOTIONS[motion]]
         with _render_lock:
             proc = subprocess.run(cmd, cwd=AD_ROOT, capture_output=True, text=True, timeout=300)
         gif = char_dir / "video.gif"

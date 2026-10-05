@@ -13,14 +13,26 @@
 
     <form id="form">
       <label class="capture">
-        <input id="photo" type="file" accept="image/*" capture="environment" required>
+        <input id="photo" type="file" accept="image/*" capture="environment">
         <span id="captureLabel">📷 Take a photo of your drawing</span>
         <img id="preview" alt="Your drawing" hidden>
       </label>
+      <button id="cameraBtn" type="button" class="secondary">🎥 Live camera (finds the paper and snaps by itself)</button>
+
+      <!-- 9. A second drawing: both meet in one AI video -->
+      <div class="second">
+        <label class="second-pick">
+          <input id="photo2" type="file" accept="image/*" capture="environment">
+          <span id="photo2Label">➕ Add a second drawing <small>(they meet in one video)</small></span>
+          <img id="preview2" alt="Your second drawing" hidden>
+        </label>
+        <button id="photo2Remove" type="button" class="link" hidden>✕ Remove second drawing</button>
+      </div>
 
       <fieldset>
         <legend>What did you draw?</legend>
         <label><input type="radio" name="mode" value="character" checked> A person / figure <small>(dances, fastest)</small></label>
+        <label><input type="radio" name="mode" value="animal"> An animal on 4 legs <small>(walks)</small></label>
         <label><input type="radio" name="mode" value="auto"> Let AI decide</label>
         <label><input type="radio" name="mode" value="scene"> Anything else <small>(AI video, limited per day)</small></label>
       </fieldset>
@@ -37,11 +49,27 @@
         <small class="meta">AI video only. Longer videos take longer to make.</small>
       </label>
 
+      <label class="toggle">
+        <input id="paint" type="checkbox"> 🎨 Colour it in first <small>(fills closed shapes with crayon colours)</small>
+      </label>
+
       <div class="actions">
         <button id="previewBtn" type="button" class="secondary">✏️ Check prompt first</button>
         <button id="submit" type="submit">Bring it to life ✨</button>
       </div>
     </form>
+
+    <section id="camera" class="camera" hidden>
+      <div class="camera-view">
+        <video id="cameraVideo" autoplay playsinline muted></video>
+        <div class="camera-guide" aria-hidden="true"></div>
+        <p id="cameraHint" class="camera-hint">Fit the paper inside the frame</p>
+      </div>
+      <div class="actions">
+        <button id="cameraCancel" type="button" class="secondary">Cancel</button>
+        <button id="cameraSnap" type="button">📸 Snap now</button>
+      </div>
+    </section>
 
     <!-- Review the AI's prompt before animating: edit it, ask for a change, or get a different idea -->
     <section id="review" class="review" hidden>
@@ -65,6 +93,13 @@
       <p id="statusText">Uploading…</p>
     </section>
 
+    <section id="game" class="game" hidden>
+      <h2>🤔 The AI guesses… is it</h2>
+      <div id="gameChoices" class="game-choices"></div>
+      <p id="gameResult" class="game-result" hidden></p>
+      <p id="gameScore" class="meta"></p>
+    </section>
+
     <section id="error" class="error" hidden></section>
 
     <section id="result" hidden>
@@ -76,6 +111,7 @@
         <button id="again" type="button" class="secondary">Draw another</button>
       </div>
       <button id="remake" type="button" class="secondary">✏️ Edit prompt &amp; remake</button>
+      <button id="soundToggle" type="button" class="link">🔊 Sound on</button>
     </section>
 
     <section id="flow" class="flow" hidden>
@@ -103,6 +139,8 @@
     </section>
   </main>
   <script src="config.js"></script>
+  <script src="sound.js"></script>
+  <script src="camera.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

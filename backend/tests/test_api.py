@@ -459,7 +459,7 @@ def test_describe_returns_prompt_to_review(monkeypatch):
                       data={"mode": "auto", "prompt": "dog plays with a ball"})
     assert res.status_code == 200
     assert res.json() == {"subject": "a puppy", "kind": "scene", "prompt": "The puppy chases the ball.",
-                          "source": "gemini", "warning": None}
+                          "source": "gemini", "warning": None, "guesses": [], "sound": None, "music": None}
 
 
 def test_describe_applies_a_change_and_a_different_take(monkeypatch):
@@ -533,3 +533,109 @@ def test_typed_move_word_beats_gemini_suggestion():
     assert choose_motion("a boy is running", "zombie", "runs, waving his arms")[0] == "zombie"
     assert choose_motion(None, None, "the boy jumps")[0] == "jumping"
     assert choose_motion(None, "not-a-move", "nothing here") == ("random", "no move named in the prompt, so random")
+
+
+def _sheet_photo() -> bytes:
+    """A white sheet with a drawn shape, photographed at an angle on a dark table."""
+    img = Image.new("RGB", (900, 700), (70, 50, 40))
+    draw = ImageDraw.Draw(img)
+    draw.polygon([(150, 90), (760, 130), (720, 620), (110, 580)], fill=(235, 232, 225))
+    draw.ellipse((330, 250, 520, 440), outline="black", width=8)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_paper_is_found_and_straightened():
+    import pytest
+
+    pytest.importorskip("cv2")
+    from app.preprocess import clean_photo
+
+    folder = Path(tempfile.mkdtemp())
+    (folder / "in.png").write_bytes(_sheet_photo())
+    report = {}
+    out = clean_photo(folder / "in.png", folder / "out.png", report)
+    assert report["paper"].startswith("found")
+    corner = Image.open(out).convert("L").getpixel((5, 5))
+    assert corner > 200  # the dark table is cropped away and the paper is white
+
+
+def test_auto_paint_fills_closed_shapes():
+    import pytest
+
+    pytest.importorskip("cv2")
+    from app.drawing_tools import auto_paint
+
+    folder = Path(tempfile.mkdtemp())
+    (folder / "in.png").write_bytes(_drawing_png())  # a circle (closed) on a stick
+    filled = auto_paint(folder / "in.png", folder / "out.png", seed=1)
+    assert filled == 1
+    r, g, b = Image.open(folder / "out.png").convert("RGB").getpixel((200, 100))  # inside the circle
+    assert (r, g, b) != (255, 255, 255)
+
+
+def test_two_drawings_become_one_scene_with_a_pair_prompt(monkeypatch):
+    asked = []
+    _fake_gemini(monkeypatch, "The dog runs over and catches the ball.", asked)
+    res = client.post("/api/jobs", data={"mode": "character"},
+                      files=[("image", ("a.png", _drawing_png(), "image/png")),
+                             ("image2", ("b.png", _drawing_png(), "image/png"))])
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert (job["status"], job["kind"], job["drawings"]) == ("done", "scene", 2)
+    assert "two separate drawings side by side" in asked[0]["contents"][0]["parts"][1]["text"]
+    assert [s["title"] for s in job["steps"]][:3] == ["Clean up photo", "Combine the two drawings", "Understand the drawing"]
+
+
+def test_animal_kind_walks_on_four_legs(monkeypatch):
+    import httpx
+
+    from app.config import settings
+
+    sent = {}
+
+    def fake_post(url, **kwargs):
+        sent.update(kwargs["data"])
+        return httpx.Response(200, content=_gif_bytes(), headers={"X-Motion": "animal_walk"},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(settings, "character_animator", "animated_drawings_api")
+    monkeypatch.setattr(settings, "ad_service_url", "http://character")
+    monkeypatch.setattr(httpx, "post", fake_post)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")}, data={"mode": "animal"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert sent == {"motion": "animal_walk"} and job["kind"] == "animal" and job["status"] == "done"
+
+
+def test_guesses_sound_and_music_come_from_gemini(monkeypatch):
+    import httpx
+
+    from app.config import settings
+
+    reply = ('{"subject": "a rocket", "guesses": ["a rocket", "a pencil", "a carrot"], "kind": "scene",'
+             ' "motion_prompt": "The rocket blasts off.", "sound": "whoosh", "music": "epic"}')
+
+    def fake_post(url, **kwargs):
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": reply}]}}]},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(httpx, "post", fake_post)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")}, data={"mode": "auto"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert job["guesses"] == ["a rocket", "a pencil", "a carrot"]
+    assert (job["sound"], job["music"]) == ("whoosh", "epic")
+
+
+def test_failed_paint_does_not_fail_the_job(monkeypatch):
+    from app import drawing_tools
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("no OpenCV")
+
+    monkeypatch.setattr(drawing_tools, "auto_paint", broken)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "paint": "true"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    paint_step = next(s for s in job["steps"] if s["title"] == "Colour it in")
+    assert job["status"] == "done" and paint_step["status"] == "failed"

@@ -18,17 +18,19 @@ from .providers import get_animator
 from .providers.animated_drawings_api import choose_motion
 from .trace import Step, note, step
 
+KINDS = ("character", "animal", "scene")
+
 log = logging.getLogger(__name__)
 
 
 @dataclass
 class Job:
     id: str
-    mode: str                     # requested: auto | character | scene
+    mode: str                     # requested: auto | character | animal | scene
     status: str = "queued"        # queued | running | done | failed
     step: str = ""                # human-readable progress for the UI
     subject: str | None = None
-    kind: str | None = None       # resolved: character | scene
+    kind: str | None = None       # resolved: character | animal | scene
     prompt: str | None = None
     animator: str | None = None
     output_url: str | None = None
@@ -36,6 +38,11 @@ class Job:
     error: str | None = None
     duration: float | None = None  # requested video length in seconds (AI video only)
     motion: str | None = None  # dance move for figures (AnimatedDrawings plays recorded moves only)
+    guesses: list[str] = field(default_factory=list)  # "Guess my drawing": the AI's guesses, best first
+    sound: str | None = None  # sound effect the page plays with the result
+    music: str | None = None  # music mood the page plays with the result
+    drawings: int = 1  # 2 = two drawings combined into one scene
+    painted: bool = False  # filled in with crayon colours before animating
     steps: list[Step] = field(default_factory=list)  # pipeline trace for the UI flow chart
 
     def to_dict(self) -> dict:
@@ -65,35 +72,86 @@ def compose_prompt(info: DrawingInfo, kind: str, user_prompt: str | None) -> str
     return info.motion_prompt
 
 
-def run_job(job: Job, upload_path: Path, user_prompt: str | None,
-            final_prompt: str | None = None, subject: str | None = None, motion: str | None = None) -> None:
-    """final_prompt: a prompt the person already reviewed on the page; used as-is, no LLM call.
-    motion: the dance move suggested while reviewing (a move word in the text still wins)."""
+@dataclass
+class JobOptions:
+    """Optional extras from the page. Everything absent keeps the plain photo-to-animation behaviour."""
+    user_prompt: str | None = None
+    final_prompt: str | None = None  # reviewed on the page (POST /api/describe): used as-is, no LLM call
+    subject: str | None = None  # goes with final_prompt
+    motion: str | None = None  # dance move suggested while reviewing (a move word in the text still wins)
+    sound: str | None = None  # goes with final_prompt
+    music: str | None = None  # goes with final_prompt
+    second_image: Path | None = None  # a second drawing: both go into one scene
+    paint: bool = False  # fill closed shapes with crayon colours first
+
+
+def prepare_drawing(upload_path: Path, out_dir: Path, steps: list[Step],
+                    second_image: Path | None = None, paint: bool = False) -> Path:
+    """Clean the photo(s), combine two drawings, paint them in. Returns the image to animate."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with step(steps, "📷", "Clean up photo", "OpenCV + Pillow") as current:
+        report: dict = {}
+        clean = clean_photo(upload_path, out_dir / "input.png", report)
+        width, height = Image.open(clean).size
+        current.outputs = {"size": f"{width}×{height}", "paper": report.get("paper", "-"),
+                           "fixes": "rotation, resize, contrast"}
+        if second_image:
+            second_report: dict = {}
+            second = clean_photo(second_image, out_dir / "input2.png", second_report)
+            current.outputs["2nd drawing paper"] = second_report.get("paper", "-")
+    if second_image:
+        with step(steps, "🧩", "Combine the two drawings", "Pillow") as current:
+            from .drawing_tools import combine
+
+            clean = combine(clean, second, out_dir / "combined.png")
+            current.outputs = {"layout": "side by side, so the video can make them meet"}
+    if paint:
+        try:
+            with step(steps, "🎨", "Colour it in", "OpenCV (no AI)") as current:
+                from .drawing_tools import auto_paint
+
+                painted = out_dir / "painted.png"
+                filled = auto_paint(clean, painted)
+                if filled:
+                    clean = painted
+                    current.outputs = {"shapes filled": str(filled)}
+                else:
+                    note("No closed shapes to fill, so the drawing stays as it is")
+        except Exception:  # the step shows as failed in the flow chart; animate the uncoloured drawing
+            log.exception("Auto-paint failed")
+    return clean
+
+
+def run_job(job: Job, upload_path: Path, options: JobOptions | None = None) -> None:
+    options = options or JobOptions()
+    user_prompt, final_prompt = options.user_prompt, options.final_prompt
     out_dir = settings.outputs_dir / job.id
     try:
         job.status = "running"
         job.step = "Cleaning up photo"
-        with step(job.steps, "📷", "Clean up photo", "Pillow") as current:
-            clean = clean_photo(upload_path, out_dir / "input.png")
-            width, height = Image.open(clean).size
-            current.outputs = {"size": f"{width}×{height}", "fixes": "rotation, resize, contrast"}
+        job.drawings = 2 if options.second_image else 1
+        job.painted = options.paint
+        clean = prepare_drawing(upload_path, out_dir, job.steps, options.second_image, options.paint)
 
         job.step = "Looking at your drawing"
         if final_prompt:
             # Already described and reviewed on the page (POST /api/describe): no second LLM call.
             with step(job.steps, "🧠", "Understand the drawing", "Reviewed by you") as current:
-                job.subject = subject or "your drawing"
-                job.kind = job.mode if job.mode in ("character", "scene") else "scene"
+                job.subject = options.subject or "your drawing"
+                job.kind = job.mode if job.mode in KINDS else "scene"
                 job.prompt = final_prompt
+                job.sound, job.music = options.sound, options.music
                 current.outputs = {"subject": job.subject, "kind": job.kind, "your prompt": final_prompt}
                 note("You checked and edited the prompt before animating")
-            typed, suggested = final_prompt, motion  # the whole reviewed text is the person's
+            typed, suggested = final_prompt, options.motion  # the whole reviewed text is the person's
         else:
             with step(job.steps, "🧠", "Understand the drawing", _describer_label()) as current:
-                info = describe_drawing(clean, user_prompt)
+                info = describe_drawing(clean, user_prompt, pair=bool(options.second_image))
                 if info.source == "default" and not current.notes:
                     note("No AI key set, so " + ("your idea gets style hints added" if user_prompt else "the default prompt is used"))
                 current.outputs = {"subject": info.subject, "kind": info.kind}
+                if info.guesses:
+                    current.outputs["guesses"] = " / ".join(info.guesses)
                 if user_prompt:
                     current.outputs["your idea"] = user_prompt
                     current.outputs["enriched prompt"] = info.motion_prompt
@@ -102,17 +160,27 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None,
                              "(video models follow those much better)")
                 else:
                     current.outputs["motion prompt"] = info.motion_prompt
-            job.subject = info.subject
-            job.kind = job.mode if job.mode in ("character", "scene") else info.kind
+                if info.sound or info.music:
+                    current.outputs["sound"] = " + ".join(
+                        x for x in (info.sound, info.music and f"{info.music} music") if x)
+            job.subject, job.guesses, job.sound, job.music = info.subject, info.guesses, info.sound, info.music
+            job.kind = job.mode if job.mode in KINDS else info.kind
             job.prompt = compose_prompt(info, job.kind, user_prompt)
             typed, suggested = user_prompt, info.move
+        if options.second_image and job.kind != "scene":
+            job.kind = "scene"  # the dance service animates one figure; two drawings make one AI video
+
         motion_reason = None
         if job.kind == "character":
             job.motion, motion_reason = choose_motion(typed, suggested, job.prompt)
+        elif job.kind == "animal":
+            job.motion, motion_reason = "animal_walk", "the four-legged walk for animals"
 
-        name = settings.character_animator if job.kind == "character" else settings.scene_animator
+        name = settings.character_animator if job.kind in ("character", "animal") else settings.scene_animator
         with step(job.steps, "🔀", "Pick the animator", "Router") as current:
             why = "you chose it" if job.mode != "auto" else f"decided by {_describer_label() or 'default'}"
+            if job.drawings == 2:
+                why = "two drawings become one AI video"
             current.outputs = {"mode": f"{job.kind} ({why})", "animator": _animator_label(name)}
             if user_prompt:
                 current.outputs["your idea"] = user_prompt
