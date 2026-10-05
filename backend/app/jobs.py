@@ -69,8 +69,16 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None) -> None:
         with step(job.steps, "🧠", "Understand the drawing", _describer_label()) as current:
             info = describe_drawing(clean, user_prompt)
             if info.source == "default" and not current.notes:
-                note("No AI key set, so the default prompt is used")
-            current.outputs = {"subject": info.subject, "kind": info.kind, "motion prompt": info.motion_prompt}
+                note("No AI key set, so " + ("your idea gets style hints added" if user_prompt else "the default prompt is used"))
+            current.outputs = {"subject": info.subject, "kind": info.kind}
+            if user_prompt:
+                current.outputs["your idea"] = user_prompt
+                current.outputs["enriched prompt"] = info.motion_prompt
+                if info.source != "default":
+                    note(f"{info.source.title()} enriched your idea into a detailed prompt "
+                         "(video models follow those much better)")
+            else:
+                current.outputs["motion prompt"] = info.motion_prompt
         job.subject = info.subject
         job.kind = job.mode if job.mode in ("character", "scene") else info.kind
         # The LLM expands the typed idea into a detailed prompt (video models follow those far better).

@@ -416,6 +416,10 @@ def test_typed_prompt_is_expanded_by_gemini_not_replaced(monkeypatch):
     assert job["prompt"].startswith("The hand-drawn puppy chases")
     router = job["steps"][2]["outputs"]
     assert router["your idea"] == "Dog playing with a ball" and router["final prompt"] == job["prompt"]
+    gemini = job["steps"][1]
+    assert gemini["outputs"]["your idea"] == "Dog playing with a ball"
+    assert gemini["outputs"]["enriched prompt"] == job["prompt"]
+    assert "Gemini enriched your idea" in gemini["notes"][0]
 
 
 def test_typed_prompt_without_llm_keeps_words_and_adds_style():
