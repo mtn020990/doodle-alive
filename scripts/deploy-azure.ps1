@@ -95,8 +95,11 @@ function Get-FrontendUrl { (Invoke-Az storage account show -n $storageName -g $R
 
 # Registry, file share and Container Apps environment, shared by both container apps.
 function Initialize-ContainerPlatform {
-    Write-Host '== Azure CLI containerapp extension'
-    Invoke-Az extension add --name containerapp --upgrade --only-show-errors -o none
+    # Install only when missing: upgrading on every run downloads from PyPI, which can be very slow.
+    if (-not (Test-Az extension show --name containerapp)) {
+        Write-Host '== Azure CLI containerapp extension'
+        Invoke-Az extension add --name containerapp --only-show-errors -o none
+    }
 
     if (-not (Test-Az acr show -n $acrName -g $ResourceGroup)) {
         Write-Host "== Container registry $acrName"
