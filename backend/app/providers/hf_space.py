@@ -2,20 +2,70 @@
 
 Every Space names its endpoint and parameters differently, so they come from
 settings. Run `python scripts/inspect_space.py` to discover them.
+
+Order: each team Hugging Face key (next key only on quota errors), then our own
+free GPU servers (Kaggle / Colab, see gpu_servers.py), which take the same API.
 """
+import logging
 import shutil
 from pathlib import Path
 
 from ..config import settings
+from ..gpu_servers import servers as gpu_servers
+from ..hf_keys import is_quota_error, pool
+from ..trace import note, set_model
+
+log = logging.getLogger(__name__)
 
 
 class HfSpaceAnimator:
     name = "hf_space"
 
     def animate(self, image_path: Path, prompt: str, out_dir: Path) -> Path:
+        try:
+            return self._animate_with_hf_keys(image_path, prompt, out_dir)
+        except Exception as hf_error:
+            servers = gpu_servers.usable()
+            if not servers:
+                raise
+            note(f"Hugging Face failed ({_first_line(hf_error)}), trying our free GPU servers")
+            for server in servers:
+                try:
+                    out = self._animate(server.url, None, image_path, prompt, out_dir)
+                except Exception as exc:
+                    log.warning("GPU server %s failed: %s", server.name, exc)
+                    note(f"{server.name} GPU failed: {_first_line(exc)}")
+                    gpu_servers.mark_failed(server, str(exc))
+                    continue
+                gpu_servers.mark_ok(server)
+                set_model(f"{server.name} GPU (free) · LTX-Video")
+                return out
+            raise RuntimeError(f"Hugging Face and all {len(servers)} GPU servers failed. Hugging Face: {hf_error}")
+
+    def _animate_with_hf_keys(self, image_path: Path, prompt: str, out_dir: Path) -> Path:
+        keys = pool.in_order()
+        if not keys:
+            return self._animate(settings.hf_space_id, None, image_path, prompt, out_dir)
+        for key in keys:
+            try:
+                out = self._animate(settings.hf_space_id, key.token, image_path, prompt, out_dir)
+            except Exception as exc:
+                if not is_quota_error(exc):
+                    raise
+                log.warning("HF key %s is out of quota; trying the next one", key.name)
+                note(f"Key {key.name} is out of free GPU quota, trying the next key")
+                pool.mark_quota_hit(key, str(exc))
+                last_quota_error = exc
+                continue
+            pool.mark_ok(key)
+            note(f"Hugging Face key: {key.name}")
+            return out
+        raise RuntimeError(f"All {len(keys)} Hugging Face keys are out of quota. Last: {last_quota_error}")
+
+    def _animate(self, space: str, token: str | None, image_path: Path, prompt: str, out_dir: Path) -> Path:
         from gradio_client import Client, handle_file
 
-        client = Client(settings.hf_space_id, token=settings.hf_token or None)
+        client = Client(space, token=token)
         kwargs = {
             settings.hf_image_param: handle_file(str(image_path)),
             settings.hf_prompt_param: prompt,
@@ -30,6 +80,11 @@ class HfSpaceAnimator:
         out = out_dir / f"animation{Path(video_path).suffix or '.mp4'}"
         shutil.copy(video_path, out)
         return out
+
+
+def _first_line(exc: Exception) -> str:
+    lines = str(exc).strip().splitlines()
+    return (lines[0] if lines else type(exc).__name__)[:160]
 
 
 def _find_file(result: object) -> str | None:

@@ -26,11 +26,29 @@ Edit `backend/.env`:
 
 | Want | Set |
 |---|---|
-| Scene videos (Wan 2.2 / LTX via Hugging Face) | `HF_TOKEN`, `SCENE_ANIMATOR=hf_space`, Space params (run `python scripts/inspect_space.py`) |
-| Dancing figures (Meta AnimatedDrawings) | `AD_REPO_DIR`, `AD_PYTHON`, `CHARACTER_ANIMATOR=animated_drawings` |
-| Auto-detect + smart motion prompt (Claude) | `ANTHROPIC_API_KEY` |
+| Scene videos (LTX-Video via Hugging Face; defaults verified) | `HF_TOKEN`, `SCENE_ANIMATOR=hf_space` |
+| Dancing figures (Meta AnimatedDrawings) | Azure: `-Part character` + `CHARACTER_ANIMATOR=animated_drawings_api`. Local: `AD_REPO_DIR`, `AD_PYTHON`, `CHARACTER_ANIMATOR=animated_drawings` |
+| Auto-detect + smart motion prompt (Claude, paid) | `ANTHROPIC_API_KEY` |
+| Same, free (Gemini free tier, used when no Claude key) | `GEMINI_API_KEY` from https://aistudio.google.com/apikey |
+| More free scene videos when HF quota runs out | `HF_TOKENS=Name:hf_…,Name:hf_…` (tried in turn), then run [notebooks/ltx_gpu_server.ipynb](notebooks/ltx_gpu_server.ipynb) on Kaggle/Colab and paste its link in the admin panel |
+
+Admin panel: open the page with `#admin` at the end and enter `ADMIN_PIN`. It shows each Hugging Face key's quota status, lets you switch keys, and takes the Kaggle/Colab GPU links. Every job also shows a "How it was made" flow chart under the result.
 
 If a real model fails, the app shows the mock animation with a warning instead of an error.
+
+## Deploy to Azure
+
+Use this when the local network blocks Hugging Face. It needs only the Azure CLI; the Docker image is built in Azure.
+
+```powershell
+az login
+.\scripts\deploy-azure.ps1 -Part backend    # settings/keys come from backend\.env; prints the backend URL
+copy frontend\.env.example frontend\.env    # set API_BASE_URL=<backend URL>
+.\scripts\deploy-azure.ps1 -Part frontend   # prints the frontend URL to open on phones
+.\scripts\deploy-azure.ps1 -Part character  # optional: Meta AnimatedDrawings service (first build is slow)
+```
+
+The backend runs on Azure Container Apps (1 replica, since jobs are in memory). The frontend is an Azure Storage static website. `/data` is an Azure Files share, so outputs and the Hugging Face cache (`HF_HOME`) persist. `-Part character` adds a second, internal-only container app; redeploy `-Part backend` afterwards so it gets `AD_SERVICE_URL`. Re-run any part to redeploy. Logs: `az containerapp logs show -n doodle-alive-api -g rg-doodle-alive --follow`.
 
 ## Tests
 
@@ -43,6 +61,8 @@ cd backend
 
 ```
 backend/app/        FastAPI app, pipeline, providers/
+character-service/  Meta AnimatedDrawings as an HTTP service (Docker, deployed to Azure)
+notebooks/          free Kaggle/Colab GPU server running LTX-Video (same API as the HF Space)
 backend/tests/      API tests (use the mock animator)
 frontend/           mobile web page (no build step)
 scripts/            run.ps1, inspect_space.py

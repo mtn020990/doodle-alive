@@ -8,6 +8,7 @@
   color-scheme: light;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* id rules below set display, which would override hidden */
 body {
   margin: 0;
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -55,3 +56,45 @@ button:disabled { opacity: 0.5; cursor: wait; }
 #media img, #media video { width: 100%; border-radius: 12px; background: white; }
 .meta { color: var(--muted); font-size: 0.9rem; margin: 0; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.admin { margin-top: 40px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); display: grid; gap: 12px; }
+.admin h2 { margin: 0; font-size: 1.2rem; }
+.admin .error { margin-top: 0; }
+.admin-login { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.admin-login input { font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.admin-keys { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.admin-keys li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.admin-keys li.active { border-color: var(--accent); }
+.admin-keys small { display: block; color: var(--muted); }
+.admin-keys button { padding: 8px 14px; }
+
+/* "How it was made": the job's pipeline as a vertical flow chart */
+.flow { margin-top: 32px; display: grid; gap: 12px; }
+.flow h2 { margin: 0; font-size: 1.2rem; }
+.flow-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.flow-step { position: relative; padding-bottom: 22px; }
+.flow-step:not(:last-child)::after {
+  content: '▼'; position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%);
+  color: var(--line); font-size: 0.8rem;
+}
+.flow-card {
+  border: 1px solid var(--line); border-left: 5px solid var(--line); border-radius: 12px;
+  background: var(--card); padding: 10px 12px; display: grid; gap: 6px;
+}
+.flow-step.done .flow-card { border-left-color: #2f9e44; }
+.flow-step.failed .flow-card { border-left-color: #c92a2a; background: #fff5f5; }
+.flow-step.running .flow-card { border-left-color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.flow-step.pending .flow-card { opacity: 0.45; border-style: dashed; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 4px #ff6b3533; } }
+.flow-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.flow-head strong { font-size: 1rem; }
+.flow-model { overflow-wrap: anywhere; font-size: 0.8rem; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+.flow-time { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+.flow-outputs { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 0.9rem; }
+.flow-outputs dt { color: var(--muted); }
+.flow-outputs dd { margin: 0; overflow-wrap: anywhere; }
+.flow-notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.85rem; }
+.flow-step.failed .flow-notes { color: #8a1c14; }
+.admin-server { grid-template-columns: 1fr !important; }
+.admin-server form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.admin-server input { font: inherit; font-size: 0.9rem; padding: 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }

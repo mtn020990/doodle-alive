@@ -20,9 +20,9 @@
 
       <fieldset>
         <legend>What did you draw?</legend>
-        <label><input type="radio" name="mode" value="auto" checked> Let AI decide</label>
-        <label><input type="radio" name="mode" value="character"> A person / figure</label>
-        <label><input type="radio" name="mode" value="scene"> Anything else</label>
+        <label><input type="radio" name="mode" value="character" checked> A person / figure <small>(dances, fastest)</small></label>
+        <label><input type="radio" name="mode" value="auto"> Let AI decide</label>
+        <label><input type="radio" name="mode" value="scene"> Anything else <small>(AI video, limited per day)</small></label>
       </fieldset>
 
       <label class="prompt">
@@ -49,7 +49,32 @@
         <button id="again" type="button" class="secondary">Draw another</button>
       </div>
     </section>
+
+    <section id="flow" class="flow" hidden>
+      <h2>How it was made</h2>
+      <ol id="flowSteps" class="flow-steps"></ol>
+    </section>
+
+    <!-- Team admin: open the page with #admin at the end of the URL -->
+    <section id="admin" class="admin" hidden>
+      <h2>Hugging Face keys</h2>
+      <p class="meta">When a key runs out of free GPU quota, the next one is used automatically. Pick one here to switch now.</p>
+      <form id="adminLogin" class="admin-login">
+        <input id="adminPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN" required>
+        <button type="submit">Open</button>
+      </form>
+      <p id="adminStatus" class="meta" hidden></p>
+      <p id="adminError" class="error" hidden></p>
+      <ul id="adminKeys" class="admin-keys"></ul>
+      <div id="adminServersBox" hidden>
+        <h2>Free GPU servers</h2>
+        <p class="meta">Used after all Hugging Face keys. Run notebooks/ltx_gpu_server.ipynb on Kaggle or Colab and paste the https://….gradio.live link it prints. Leave empty to turn one off.</p>
+        <ul id="adminServers" class="admin-keys"></ul>
+      </div>
+      <button id="adminRefresh" type="button" class="secondary" hidden>Refresh</button>
+    </section>
   </main>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .animated_drawings import AnimatedDrawingsAnimator
+from .animated_drawings_api import AnimatedDrawingsApiAnimator
 from .hf_space import HfSpaceAnimator
 from .mock import MockAnimator
 
@@ -23,6 +24,7 @@ PROVIDERS: dict[str, type] = {
     "mock": MockAnimator,
     "hf_space": HfSpaceAnimator,
     "animated_drawings": AnimatedDrawingsAnimator,
+    "animated_drawings_api": AnimatedDrawingsApiAnimator,
 }
 
 

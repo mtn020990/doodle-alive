@@ -13,7 +13,7 @@ from gradio_client import Client
 
 load_dotenv(Path(__file__).resolve().parent.parent / "backend" / ".env")
 
-space = sys.argv[1] if len(sys.argv) > 1 else os.getenv("HF_SPACE_ID", "Wan-AI/Wan-2.2-5B")
+space = sys.argv[1] if len(sys.argv) > 1 else os.getenv("HF_SPACE_ID", "Lightricks/ltx-video-distilled")
 print(f"Connecting to {space} ...")
 client = Client(space, token=os.getenv("HF_TOKEN") or None)
 client.view_api(all_endpoints=True)
