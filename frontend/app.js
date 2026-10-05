@@ -40,8 +40,27 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+// Figures can only play preset moves; the prompt picks one by keyword (see the backend's MOTION_WORDS).
+const PROMPT_HELP = {
+  character: ['e.g. waves hello', 'Moves: wave, jump, jumping jacks, zombie walk, dab. Anything else picks a random dance.'],
+  auto: ['e.g. waves hello, or the rocket blasts off', 'People get a move (wave, jump, jumping jacks, zombie walk, dab); anything else gets an AI video.'],
+  scene: ['e.g. the rocket blasts off into space', 'Describe any motion; the AI video follows it.'],
+};
+
+function updatePromptHelp() {
+  const [placeholder, hint] = PROMPT_HELP[form.elements.mode.value] || PROMPT_HELP.scene;
+  $('prompt').placeholder = placeholder;
+  $('promptHint').textContent = hint;
+}
+
+form.addEventListener('change', (event) => {
+  if (event.target.name === 'mode') updatePromptHelp();
+});
+updatePromptHelp();
+
 $('again').addEventListener('click', () => {
   form.reset();
+  updatePromptHelp();
   preview.hidden = true;
   $('captureLabel').hidden = false;
   $('result').hidden = true;

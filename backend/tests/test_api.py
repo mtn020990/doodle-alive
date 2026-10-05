@@ -290,3 +290,36 @@ def test_admin_sets_gpu_server_link_and_it_is_saved(monkeypatch):
     res = client.post("/api/admin/gpu-servers", json={"name": "Kaggle", "url": "https://abc.gradio.live/"}, headers=pin)
     assert res.json()["servers"][0]["url"] == "https://abc.gradio.live"
     assert "abc.gradio.live" in store.read_text()
+
+
+def test_character_motion_follows_the_prompt():
+    from app.providers.animated_drawings_api import motion_for
+
+    assert motion_for("he waves hello to everyone") == ("wave_hello", "waves")
+    assert motion_for("doing jumping jacks") == ("jumping_jacks", "jumping jacks")
+    assert motion_for("Jumps up high!")[0] == "jumping"
+    assert motion_for("walks like a zombie")[0] == "zombie"
+    assert motion_for("this one is shy")[0] == "random"  # "hi" inside "this" must not count
+    assert motion_for("the rocket blasts off into space") == ("random", None)
+
+
+def test_character_prompt_is_sent_as_motion(monkeypatch):
+    import httpx
+
+    from app.config import settings
+
+    sent = {}
+
+    def fake_post(url, **kwargs):
+        sent.update(kwargs["data"])
+        return httpx.Response(200, content=_gif_bytes(), headers={"X-Motion": "wave_hello"},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(settings, "character_animator", "animated_drawings_api")
+    monkeypatch.setattr(settings, "ad_service_url", "http://character")
+    monkeypatch.setattr(httpx, "post", fake_post)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "character", "prompt": "wave hello"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert sent == {"motion": "wave_hello"}
+    assert 'wave_hello (from "wave" in the prompt)' in job["steps"][3]["notes"][0]
