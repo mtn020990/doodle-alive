@@ -37,7 +37,20 @@ The person asked for this motion: "{text}"
 motion_prompt must show exactly that motion (don't swap it for a different one),
 described in detail for this drawing."""
 
+# Reviewing a prompt on the page: change it as asked, or write a different take.
+CHANGE = """
+
+The current motion_prompt is: "{current}"
+Rewrite it with this change: "{change}". Keep everything else that still fits."""
+
+DIFFERENT = """
+
+The current motion_prompt is: "{current}"
+Write a clearly different, fun take on the motion (still fitting the drawing and the
+person's idea, if any). Don't reuse its wording."""
+
 MAX_IDEA_CHARS = 300
+MAX_PROMPT_CHARS = 1500
 
 
 @dataclass
@@ -48,10 +61,25 @@ class DrawingInfo:
     source: str  # "claude" | "gemini" | "default"
 
 
-def describe_drawing(image_path: Path, user_idea: str | None = None) -> DrawingInfo:
-    """user_idea: the motion the person typed; the LLM expands it instead of inventing one."""
+def describe_drawing(
+    image_path: Path,
+    user_idea: str | None = None,
+    current: str | None = None,
+    change: str | None = None,
+    different: bool = False,
+) -> DrawingInfo:
+    """user_idea: the motion the person typed; the LLM expands it instead of inventing one.
+    current + change: rewrite the current prompt with that change; current + different: a new take.
+    """
     idea = (user_idea or "").strip()[:MAX_IDEA_CHARS]
-    fallback = f"{idea.rstrip('.')}. {STYLE}" if idea else DEFAULT_PROMPT
+    current = (current or "").strip()[:MAX_PROMPT_CHARS]
+    change = (change or "").strip()[:MAX_IDEA_CHARS]
+    if current and change:
+        fallback = f"{current.rstrip('.')}. {change.rstrip('.')}."
+    elif current:
+        fallback = current
+    else:
+        fallback = f"{idea.rstrip('.')}. {STYLE}" if idea else DEFAULT_PROMPT
     if settings.anthropic_api_key:
         ask, name = _ask_claude, "Claude"
     elif settings.gemini_api_key:
@@ -59,16 +87,22 @@ def describe_drawing(image_path: Path, user_idea: str | None = None) -> DrawingI
     else:
         return DrawingInfo("a drawing", "scene", fallback, "default")
     # replace(), not format(): the instructions contain JSON braces.
-    instructions = INSTRUCTIONS.replace("{idea}", IDEA.replace("{text}", idea.replace('"', "'")) if idea else "")
+    quote = lambda text: text.replace('"', "'")
+    extra = IDEA.replace("{text}", quote(idea)) if idea else ""
+    if current and change:
+        extra += CHANGE.replace("{current}", quote(current)).replace("{change}", quote(change))
+    elif current and different:
+        extra += DIFFERENT.replace("{current}", quote(current))
+    instructions = INSTRUCTIONS.replace("{idea}", extra)
     try:
-        return ask(image_path, instructions)
+        return ask(image_path, instructions, creative=different)
     except Exception as exc:  # never let captioning break the demo
         log.exception("%s captioning failed; using default prompt", name)
         note(f"{name} failed ({str(exc).splitlines()[0][:160]}), so " + ("your prompt is used as typed" if idea else "the default prompt is used"))
         return DrawingInfo("a drawing", "scene", fallback, "default")
 
 
-def _ask_claude(image_path: Path, instructions: str) -> DrawingInfo:
+def _ask_claude(image_path: Path, instructions: str, creative: bool = False) -> DrawingInfo:
     import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -93,7 +127,7 @@ def _ask_claude(image_path: Path, instructions: str) -> DrawingInfo:
     return _parse_reply(text, "claude")
 
 
-def _ask_gemini(image_path: Path, instructions: str) -> DrawingInfo:
+def _ask_gemini(image_path: Path, instructions: str, creative: bool = False) -> DrawingInfo:
     import httpx
 
     image_data = base64.standard_b64encode(image_path.read_bytes()).decode("utf-8")
@@ -105,7 +139,8 @@ def _ask_gemini(image_path: Path, instructions: str) -> DrawingInfo:
                 {"inline_data": {"mime_type": "image/png", "data": image_data}},
                 {"text": instructions},
             ]}],
-            "generationConfig": {"responseMimeType": "application/json"},
+            # A higher temperature for "different idea", so it really is different.
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 1.4 if creative else 1.0},
         },
         timeout=60,
     )

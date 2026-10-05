@@ -31,6 +31,16 @@ form { display: grid; gap: 16px; }
 fieldset { border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; }
 .prompt { display: grid; gap: 6px; }
 .duration { display: grid; gap: 4px; }
+.review { margin-top: 24px; display: grid; gap: 12px; }
+.review h2 { margin: 0; font-size: 1.2rem; }
+.review .meta { margin: 0; }
+.review textarea {
+  font: inherit; font-size: 0.95rem; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+  width: 100%; resize: vertical; background: var(--card);
+}
+.review-change { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.review-change input { font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.link { background: none; color: var(--muted); padding: 4px; font-weight: 400; justify-self: start; }
 .duration input { width: 100%; accent-color: var(--accent); }
 .prompt input {
   font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 10px;

@@ -14,7 +14,11 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .gpu_servers import servers as gpu_servers
 from .hf_keys import pool as hf_key_pool
-from .jobs import create_job, get_job, run_job
+from .jobs import compose_prompt, create_job, get_job, run_job
+from .preprocess import clean_photo
+from .prompting import MAX_PROMPT_CHARS, describe_drawing
+from .providers.animated_drawings_api import motion_for
+from .trace import step
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,6 +57,21 @@ def health() -> dict:
     }
 
 
+def _check_mode(mode: str) -> None:
+    if mode not in ALLOWED_MODES:
+        raise HTTPException(400, f"mode must be one of {sorted(ALLOWED_MODES)}")
+
+
+def _save_upload(image: UploadFile, data: bytes) -> Path:
+    if not (image.content_type or "").startswith("image/"):
+        raise HTTPException(400, "Please upload an image")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Image is too large (max 15 MB)")
+    upload_path = settings.uploads_dir / f"{uuid.uuid4().hex}{Path(image.filename or '').suffix or '.jpg'}"
+    upload_path.write_bytes(data)
+    return upload_path
+
+
 @app.post("/api/jobs", status_code=202)
 async def submit_job(
     background: BackgroundTasks,
@@ -60,24 +79,56 @@ async def submit_job(
     mode: str = Form("auto"),
     prompt: str | None = Form(None),
     duration: float | None = Form(None),  # optional; absent = the video model's default length
+    final_prompt: str | None = Form(None),  # optional; a prompt reviewed via /api/describe, used as-is
+    subject: str | None = Form(None),  # optional; goes with final_prompt, for display
 ) -> dict:
-    if mode not in ALLOWED_MODES:
-        raise HTTPException(400, f"mode must be one of {sorted(ALLOWED_MODES)}")
+    _check_mode(mode)
     if duration is not None and not MIN_DURATION <= duration <= MAX_DURATION:
         raise HTTPException(400, f"duration must be between {MIN_DURATION} and {MAX_DURATION} seconds")
-    if not (image.content_type or "").startswith("image/"):
-        raise HTTPException(400, "Please upload an image")
-    data = await image.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "Image is too large (max 15 MB)")
-
-    upload_path = settings.uploads_dir / f"{uuid.uuid4().hex}{Path(image.filename or '').suffix or '.jpg'}"
-    upload_path.write_bytes(data)
+    upload_path = _save_upload(image, await image.read())
 
     job = create_job(mode)
     job.duration = duration
-    background.add_task(run_job, job, upload_path, (prompt or "").strip() or None)
+    reviewed = (final_prompt or "").strip()[:MAX_PROMPT_CHARS] or None
+    background.add_task(run_job, job, upload_path, (prompt or "").strip() or None,
+                        reviewed, (subject or "").strip()[:120] or None)
     return job.to_dict()
+
+
+@app.post("/api/describe")
+def describe(
+    image: UploadFile = File(...),
+    mode: str = Form("auto"),
+    prompt: str | None = Form(None),  # the person's idea, as on /api/jobs
+    current: str | None = Form(None),  # the prompt shown on the page, for change / different
+    change: str | None = Form(None),  # e.g. "the ball rolls on the ground"
+    different: bool = Form(False),  # write a new take on `current`
+) -> dict:
+    """Write (or rewrite) the motion prompt so the person can review it before animating."""
+    _check_mode(mode)
+    upload_path = _save_upload(image, image.file.read())
+    clean_path = upload_path.with_name(f"{upload_path.stem}-clean.png")
+    trace: list = []
+    try:
+        clean_photo(upload_path, clean_path)
+        with step(trace, "🧠", "describe") as current_step:
+            idea = (prompt or "").strip() or None
+            info = describe_drawing(clean_path, idea, current=current, change=change, different=different)
+    finally:
+        upload_path.unlink(missing_ok=True)
+        clean_path.unlink(missing_ok=True)
+    kind = mode if mode in ("character", "scene") else info.kind
+    rewrite = bool((current or "").strip() and (change or different))
+    # A rewrite of the reviewed text replaces it as-is; a first description gets composed like a job's.
+    final = info.motion_prompt if rewrite else compose_prompt(info, kind, idea)
+    warnings = list(current_step.notes)
+    if different and info.source == "default":
+        warnings.append("A different idea needs Gemini, so the prompt is unchanged")
+    result = {"subject": info.subject, "kind": kind, "prompt": final, "source": info.source,
+              "warning": " ".join(warnings) or None}
+    if kind == "character":
+        result["motion"] = motion_for(final)[0]
+    return result
 
 
 @app.get("/api/jobs/{job_id}")

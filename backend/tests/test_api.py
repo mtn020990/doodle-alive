@@ -435,3 +435,64 @@ def test_first_motion_word_wins():
     # typed words come first, so "jump" beats the LLM's later "waving"
     assert motion_for("jump. The figure jumps while waving its arms")[0] == "jumping"
     assert motion_for("doing jumping jacks")[0] == "jumping_jacks"  # tie at same spot: list order
+
+
+def _fake_gemini(monkeypatch, reply_prompt, asked):
+    import httpx
+
+    from app.config import settings
+
+    def fake_post(url, **kwargs):
+        asked.append(kwargs["json"])
+        reply = '{"subject": "a puppy", "kind": "scene", "motion_prompt": "%s"}' % reply_prompt
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": reply}]}}]},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+
+def test_describe_returns_prompt_to_review(monkeypatch):
+    asked = []
+    _fake_gemini(monkeypatch, "The puppy chases the ball.", asked)
+    res = client.post("/api/describe", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "auto", "prompt": "dog plays with a ball"})
+    assert res.status_code == 200
+    assert res.json() == {"subject": "a puppy", "kind": "scene", "prompt": "The puppy chases the ball.",
+                          "source": "gemini", "warning": None}
+
+
+def test_describe_applies_a_change_and_a_different_take(monkeypatch):
+    asked = []
+    _fake_gemini(monkeypatch, "The puppy chases the ball as it rolls on the ground.", asked)
+    res = client.post("/api/describe", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "current": "The puppy chases the ball.",
+                            "change": "the ball rolls on the ground"})
+    assert res.json()["prompt"] == "The puppy chases the ball as it rolls on the ground."
+    text = asked[0]["contents"][0]["parts"][1]["text"]
+    assert 'Rewrite it with this change: "the ball rolls on the ground"' in text
+
+    client.post("/api/describe", files={"image": ("d.png", _drawing_png(), "image/png")},
+                data={"mode": "scene", "current": "The puppy chases the ball.", "different": "true"})
+    assert "clearly different" in asked[1]["contents"][0]["parts"][1]["text"]
+    assert asked[1]["generationConfig"]["temperature"] > asked[0]["generationConfig"]["temperature"]
+
+
+def test_describe_without_llm_appends_change():
+    res = client.post("/api/describe", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "character", "current": "The figure jumps.", "change": "then waves hello"})
+    body = res.json()
+    assert body["prompt"] == "The figure jumps. then waves hello."
+    assert body["motion"] == "jumping"  # first move word wins
+
+
+def test_job_uses_reviewed_prompt_without_calling_the_llm(monkeypatch):
+    asked = []
+    _fake_gemini(monkeypatch, "should not be used", asked)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "final_prompt": "The puppy rolls the ball, edited by me.",
+                            "subject": "a puppy"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert asked == []
+    assert (job["status"], job["prompt"], job["subject"]) == ("done", "The puppy rolls the ball, edited by me.", "a puppy")
+    assert job["steps"][1]["model"] == "Reviewed by you"

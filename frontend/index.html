@@ -37,8 +37,28 @@
         <small class="meta">AI video only. Longer videos take longer to make.</small>
       </label>
 
-      <button id="submit" type="submit">Bring it to life ✨</button>
+      <div class="actions">
+        <button id="previewBtn" type="button" class="secondary">✏️ Check prompt first</button>
+        <button id="submit" type="submit">Bring it to life ✨</button>
+      </div>
     </form>
+
+    <!-- Review the AI's prompt before animating: edit it, ask for a change, or get a different idea -->
+    <section id="review" class="review" hidden>
+      <h2>Check the prompt</h2>
+      <p id="reviewMeta" class="meta"></p>
+      <p id="reviewWarning" class="warning" hidden></p>
+      <textarea id="reviewPrompt" rows="5" aria-label="Prompt for the animation"></textarea>
+      <form id="reviewChangeForm" class="review-change">
+        <input id="reviewChange" type="text" placeholder="Add or change… e.g. the ball rolls on the ground">
+        <button type="submit" class="secondary">Apply</button>
+      </form>
+      <div class="actions">
+        <button id="reviewDifferent" type="button" class="secondary">🎲 Different idea</button>
+        <button id="reviewGo" type="button">Bring it to life ✨</button>
+      </div>
+      <button id="reviewBack" type="button" class="link">← Back</button>
+    </section>
 
     <section id="status" hidden>
       <div class="spinner" aria-hidden="true"></div>
@@ -55,6 +75,7 @@
         <a id="download" class="button" download>Save</a>
         <button id="again" type="button" class="secondary">Draw another</button>
       </div>
+      <button id="remake" type="button" class="secondary">✏️ Edit prompt &amp; remake</button>
     </section>
 
     <section id="flow" class="flow" hidden>

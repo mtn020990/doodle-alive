@@ -13,7 +13,7 @@ from PIL import Image
 
 from .config import settings
 from .preprocess import clean_photo
-from .prompting import describe_drawing
+from .prompting import DrawingInfo, describe_drawing
 from .providers import get_animator
 from .trace import Step, note, step
 
@@ -55,7 +55,17 @@ def get_job(job_id: str) -> Job | None:
     return _jobs.get(job_id)
 
 
-def run_job(job: Job, upload_path: Path, user_prompt: str | None) -> None:
+def compose_prompt(info: DrawingInfo, kind: str, user_prompt: str | None) -> str:
+    """The prompt sent to the animator. The LLM's text expands the typed idea (video models follow
+    detailed prompts far better); figures keep the typed words up front, so they pick the dance move."""
+    if user_prompt and kind == "character" and info.source != "default":
+        return f"{user_prompt}. {info.motion_prompt}"
+    return info.motion_prompt
+
+
+def run_job(job: Job, upload_path: Path, user_prompt: str | None,
+            final_prompt: str | None = None, subject: str | None = None) -> None:
+    """final_prompt: a prompt the person already reviewed on the page; used as-is, no LLM call."""
     out_dir = settings.outputs_dir / job.id
     try:
         job.status = "running"
@@ -66,26 +76,31 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None) -> None:
             current.outputs = {"size": f"{width}×{height}", "fixes": "rotation, resize, contrast"}
 
         job.step = "Looking at your drawing"
-        with step(job.steps, "🧠", "Understand the drawing", _describer_label()) as current:
-            info = describe_drawing(clean, user_prompt)
-            if info.source == "default" and not current.notes:
-                note("No AI key set, so " + ("your idea gets style hints added" if user_prompt else "the default prompt is used"))
-            current.outputs = {"subject": info.subject, "kind": info.kind}
-            if user_prompt:
-                current.outputs["your idea"] = user_prompt
-                current.outputs["enriched prompt"] = info.motion_prompt
-                if info.source != "default":
-                    note(f"{info.source.title()} enriched your idea into a detailed prompt "
-                         "(video models follow those much better)")
-            else:
-                current.outputs["motion prompt"] = info.motion_prompt
-        job.subject = info.subject
-        job.kind = job.mode if job.mode in ("character", "scene") else info.kind
-        # The LLM expands the typed idea into a detailed prompt (video models follow those far better).
-        # Figures keep the typed words up front, so they pick the dance move.
-        job.prompt = info.motion_prompt
-        if user_prompt and job.kind == "character" and info.source != "default":
-            job.prompt = f"{user_prompt}. {info.motion_prompt}"
+        if final_prompt:
+            # Already described and reviewed on the page (POST /api/describe): no second LLM call.
+            with step(job.steps, "🧠", "Understand the drawing", "Reviewed by you") as current:
+                job.subject = subject or "your drawing"
+                job.kind = job.mode if job.mode in ("character", "scene") else "scene"
+                job.prompt = final_prompt
+                current.outputs = {"subject": job.subject, "kind": job.kind, "your prompt": final_prompt}
+                note("You checked and edited the prompt before animating")
+        else:
+            with step(job.steps, "🧠", "Understand the drawing", _describer_label()) as current:
+                info = describe_drawing(clean, user_prompt)
+                if info.source == "default" and not current.notes:
+                    note("No AI key set, so " + ("your idea gets style hints added" if user_prompt else "the default prompt is used"))
+                current.outputs = {"subject": info.subject, "kind": info.kind}
+                if user_prompt:
+                    current.outputs["your idea"] = user_prompt
+                    current.outputs["enriched prompt"] = info.motion_prompt
+                    if info.source != "default":
+                        note(f"{info.source.title()} enriched your idea into a detailed prompt "
+                             "(video models follow those much better)")
+                else:
+                    current.outputs["motion prompt"] = info.motion_prompt
+            job.subject = info.subject
+            job.kind = job.mode if job.mode in ("character", "scene") else info.kind
+            job.prompt = compose_prompt(info, job.kind, user_prompt)
 
         name = settings.character_animator if job.kind == "character" else settings.scene_animator
         with step(job.steps, "🔀", "Pick the animator", "Router") as current:

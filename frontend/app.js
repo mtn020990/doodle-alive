@@ -16,18 +16,27 @@ photo.addEventListener('change', () => {
   $('captureLabel').hidden = true;
 });
 
-form.addEventListener('submit', async (event) => {
+let draft = null; // the prompt under review: { kind, subject }
+let lastJob = null; // for "Edit prompt & remake"
+
+form.addEventListener('submit', (event) => {
   event.preventDefault();
+  startJob({
+    mode: form.elements.mode.value,
+    prompt: $('prompt').value.trim(),
+    duration: $('durationBox').hidden ? '' : $('duration').value,
+  });
+});
+
+async function startJob(fields) {
   const file = photo.files[0];
   if (!file) return showError('Take a photo of your drawing first.');
-
   const body = new FormData();
   body.append('image', file);
-  body.append('mode', form.elements.mode.value);
-  const prompt = $('prompt').value.trim();
-  if (prompt) body.append('prompt', prompt);
-  if (!$('durationBox').hidden) body.append('duration', $('duration').value);
-
+  for (const [key, value] of Object.entries(fields)) {
+    if (value) body.append(key, value);
+  }
+  $('review').hidden = true;
   setBusy(true, 'Uploading…');
   try {
     const res = await fetch(`${API_BASE}/api/jobs`, { method: 'POST', body });
@@ -39,7 +48,102 @@ form.addEventListener('submit', async (event) => {
   } finally {
     setBusy(false);
   }
+}
+
+// ---- Check the prompt first: the AI writes it, the person edits it, asks for a change or a new idea ----
+
+$('previewBtn').addEventListener('click', async () => {
+  if (!photo.files[0]) return showError('Take a photo of your drawing first.');
+  if (await describe({}, 'The AI is looking at your drawing…')) {
+    form.hidden = true;
+    $('review').hidden = false;
+  }
 });
+
+$('reviewChangeForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const change = $('reviewChange').value.trim();
+  if (!change) return $('reviewChange').focus();
+  if (await describe({ current: $('reviewPrompt').value.trim(), change }, 'Updating the prompt…')) {
+    $('reviewChange').value = '';
+  }
+});
+
+$('reviewDifferent').addEventListener('click', () => {
+  describe({ current: $('reviewPrompt').value.trim(), different: 'true' }, 'Writing a different idea…');
+});
+
+$('reviewGo').addEventListener('click', () => {
+  const finalPrompt = $('reviewPrompt').value.trim();
+  if (!finalPrompt) return $('reviewPrompt').focus();
+  startJob({
+    mode: draft.kind,
+    final_prompt: finalPrompt,
+    subject: draft.subject,
+    duration: draft.kind === 'character' ? '' : $('duration').value,
+  });
+});
+
+$('reviewBack').addEventListener('click', () => {
+  $('review').hidden = true;
+  $('error').hidden = true;
+  form.hidden = false;
+});
+
+$('reviewPrompt').addEventListener('input', () => {
+  if (draft && draft.kind === 'character') {
+    $('reviewMeta').textContent = `${draft.subject} · dance move: picked from words like wave, jump, zombie in your text`;
+  }
+});
+
+$('remake').addEventListener('click', () => {
+  if (!lastJob) return;
+  showDraft({ kind: lastJob.kind || 'scene', subject: lastJob.subject || 'your drawing', prompt: lastJob.prompt || '' });
+  $('result').hidden = true;
+  $('flow').hidden = true;
+  $('review').hidden = false;
+});
+
+// Returns true when the review panel got a new prompt.
+async function describe(extra, busyText) {
+  const body = new FormData();
+  body.append('image', photo.files[0]);
+  body.append('mode', draft && extra.current ? draft.kind : form.elements.mode.value);
+  const idea = $('prompt').value.trim();
+  if (idea) body.append('prompt', idea);
+  for (const [key, value] of Object.entries(extra)) body.append(key, value);
+
+  setReviewBusy(true);
+  setBusy(true, busyText);
+  try {
+    const res = await fetch(`${API_BASE}/api/describe`, { method: 'POST', body });
+    if (!res.ok) throw new Error(await errorText(res));
+    showDraft(await res.json());
+    return true;
+  } catch (err) {
+    showError(err.message || String(err));
+    return false;
+  } finally {
+    setBusy(false);
+    setReviewBusy(false);
+  }
+}
+
+function showDraft(data) {
+  draft = { kind: data.kind, subject: data.subject };
+  $('reviewPrompt').value = data.prompt;
+  const what = data.kind === 'character'
+    ? `dance move: ${data.motion ? data.motion.replace('_', ' ') : 'picked from words like wave, jump, zombie'}`
+    : 'AI video';
+  $('reviewMeta').textContent = `${data.subject} · ${what}`;
+  $('reviewWarning').hidden = !data.warning;
+  $('reviewWarning').textContent = data.warning || '';
+}
+
+function setReviewBusy(busy) {
+  for (const id of ['reviewGo', 'reviewDifferent', 'reviewBack', 'previewBtn']) $(id).disabled = busy;
+  $('reviewChangeForm').querySelector('button').disabled = busy;
+}
 
 // Figures can only play preset moves; the prompt picks one by keyword (see the backend's MOTION_WORDS).
 const PROMPT_HELP = {
@@ -74,6 +178,8 @@ $('again').addEventListener('click', () => {
   $('result').hidden = true;
   $('error').hidden = true;
   $('flow').hidden = true;
+  $('review').hidden = true;
+  draft = null;
   form.hidden = false;
 });
 
@@ -91,6 +197,7 @@ async function poll(jobId) {
 }
 
 function showResult(job) {
+  lastJob = job;
   const media = $('media');
   media.replaceChildren();
   const outputUrl = API_BASE + job.output_url;
