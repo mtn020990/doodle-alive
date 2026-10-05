@@ -7,6 +7,10 @@ os.environ["DATA_DIR"] = tempfile.mkdtemp()
 os.environ["SCENE_ANIMATOR"] = "mock"
 os.environ["CHARACTER_ANIMATOR"] = "mock"
 os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""  # never call the real LLM from tests
+os.environ["HF_TOKENS"] = ""
+os.environ["AD_SERVICE_URL"] = ""
+os.environ["GPU_SERVERS"] = ""
 
 from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
@@ -387,3 +391,43 @@ def test_hf_space_sends_duration_as_space_parameter(monkeypatch):
     img.write_bytes(_drawing_png())
     HfSpaceAnimator().animate(img, "p", Path(tempfile.mkdtemp()), duration=7)
     assert sent["duration_ui"] == 7
+
+
+def test_typed_prompt_is_expanded_by_gemini_not_replaced(monkeypatch):
+    import httpx
+
+    from app.config import settings
+
+    asked = {}
+    reply = ('{"subject": "a puppy", "kind": "scene", "motion_prompt": '
+             '"The hand-drawn puppy chases and pushes a ball across the ground, tail wagging."}')
+
+    def fake_post(url, **kwargs):
+        asked["text"] = kwargs["json"]["contents"][0]["parts"][1]["text"]
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": reply}]}}]},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(httpx, "post", fake_post)
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "prompt": "Dog playing with a ball"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert 'The person asked for this motion: "Dog playing with a ball"' in asked["text"]
+    assert job["prompt"].startswith("The hand-drawn puppy chases")
+    router = job["steps"][2]["outputs"]
+    assert router["your idea"] == "Dog playing with a ball" and router["final prompt"] == job["prompt"]
+
+
+def test_typed_prompt_without_llm_keeps_words_and_adds_style():
+    res = client.post("/api/jobs", files={"image": ("d.png", _drawing_png(), "image/png")},
+                      data={"mode": "scene", "prompt": "Dog playing with a ball"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert job["prompt"] == "Dog playing with a ball. Keep the hand-drawn style of the drawing and a static camera."
+
+
+def test_first_motion_word_wins():
+    from app.providers.animated_drawings_api import motion_for
+
+    # typed words come first, so "jump" beats the LLM's later "waving"
+    assert motion_for("jump. The figure jumps while waving its arms")[0] == "jumping"
+    assert motion_for("doing jumping jacks")[0] == "jumping_jacks"  # tie at same spot: list order

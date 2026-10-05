@@ -67,20 +67,25 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None) -> None:
 
         job.step = "Looking at your drawing"
         with step(job.steps, "🧠", "Understand the drawing", _describer_label()) as current:
-            info = describe_drawing(clean)
+            info = describe_drawing(clean, user_prompt)
             if info.source == "default" and not current.notes:
                 note("No AI key set, so the default prompt is used")
             current.outputs = {"subject": info.subject, "kind": info.kind, "motion prompt": info.motion_prompt}
         job.subject = info.subject
         job.kind = job.mode if job.mode in ("character", "scene") else info.kind
-        job.prompt = user_prompt or info.motion_prompt
+        # The LLM expands the typed idea into a detailed prompt (video models follow those far better).
+        # Figures keep the typed words up front, so they pick the dance move.
+        job.prompt = info.motion_prompt
+        if user_prompt and job.kind == "character" and info.source != "default":
+            job.prompt = f"{user_prompt}. {info.motion_prompt}"
 
         name = settings.character_animator if job.kind == "character" else settings.scene_animator
         with step(job.steps, "🔀", "Pick the animator", "Router") as current:
             why = "you chose it" if job.mode != "auto" else f"decided by {_describer_label() or 'default'}"
             current.outputs = {"mode": f"{job.kind} ({why})", "animator": _animator_label(name)}
             if user_prompt:
-                current.outputs["motion prompt"] = f"{user_prompt} (yours)"
+                current.outputs["your idea"] = user_prompt
+            current.outputs["final prompt"] = job.prompt
             if job.duration:
                 current.outputs["length"] = (f"{job.duration:g} s" if job.kind == "scene"
                                              else f"{job.duration:g} s if it falls back to AI video (dances have a fixed length)")
@@ -88,7 +93,8 @@ def run_job(job: Job, upload_path: Path, user_prompt: str | None) -> None:
         output = _animate_with_fallback(job, name, clean, out_dir)
 
         job.output_url = f"/media/{job.id}/{output.relative_to(out_dir).as_posix()}"
-        with step(job.steps, "✅", "Ready", _animator_label(job.animator or name)) as current:
+        made_by = job.steps[-1].model  # the Animate step that worked, e.g. "Kaggle GPU (free) · LTX-Video"
+        with step(job.steps, "✅", "Ready", made_by) as current:
             current.outputs = {"file": "MP4 video" if output.suffix == ".mp4" else "animated GIF",
                                "size": f"{output.stat().st_size // 1024} KB"}
         job.status = "done"

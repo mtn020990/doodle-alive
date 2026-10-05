@@ -26,12 +26,17 @@ MOTION_WORDS = [
 
 
 def motion_for(prompt: str) -> tuple[str, str | None]:
-    """(motion, the word that chose it); falls back to AD_MOTION when nothing matches."""
-    for motion, pattern in MOTION_WORDS:
+    """(motion, the word that chose it); falls back to AD_MOTION when nothing matches.
+
+    The earliest word in the prompt wins, so the person's own words (put first) beat the
+    LLM's longer description; on a tie, the list order decides ("jumping jacks" before "jump").
+    """
+    best = None
+    for rank, (motion, pattern) in enumerate(MOTION_WORDS):
         found = re.search(pattern, prompt or "", re.IGNORECASE)
-        if found:
-            return motion, found.group(0)
-    return settings.ad_motion, None
+        if found and (best is None or (found.start(), rank) < best[0]):
+            best = ((found.start(), rank), motion, found.group(0))
+    return (best[1], best[2]) if best else (settings.ad_motion, None)
 
 
 class AnimatedDrawingsApiAnimator:

@@ -14,22 +14,30 @@ from .trace import note
 
 log = logging.getLogger(__name__)
 
-DEFAULT_PROMPT = (
-    "The hand-drawn picture comes to life with gentle, playful motion, "
-    "keeping the crayon sketch style, static camera."
-)
+STYLE = "Keep the hand-drawn style of the drawing and a static camera."
+DEFAULT_PROMPT = f"The hand-drawn picture comes to life with gentle, playful motion. {STYLE}"
 
 INSTRUCTIONS = """You are helping animate a hand-drawn picture that was photographed with a phone.
 Reply with JSON only, no prose, in exactly this shape:
 {"subject": "<what the drawing shows, max 8 words>",
  "kind": "character" | "scene",
- "motion_prompt": "<one sentence for an image-to-video model>"}
+ "motion_prompt": "<2-3 sentences for an image-to-video model>"}
 
 kind = "character" only if the main subject is a single human-like figure with a
 head, body, two arms and two legs; otherwise "scene".
-motion_prompt: describe fun, simple motion that fits the subject (e.g. a rocket
-blasts off with puffs of smoke). Always keep the hand-drawn crayon style and a
-static camera. Don't add new objects."""
+motion_prompt: video models follow detailed prompts much better than short ones, so
+name the subject as drawn, then describe clearly and concretely how it moves (e.g. a
+rocket blasts off upward, trailing puffs of smoke). Always keep the hand-drawn style
+and a static camera. Don't add new objects.{idea}"""
+
+# The person's own words for the motion, when they typed some.
+IDEA = """
+
+The person asked for this motion: "{text}"
+motion_prompt must show exactly that motion (don't swap it for a different one),
+described in detail for this drawing."""
+
+MAX_IDEA_CHARS = 300
 
 
 @dataclass
@@ -40,22 +48,27 @@ class DrawingInfo:
     source: str  # "claude" | "gemini" | "default"
 
 
-def describe_drawing(image_path: Path) -> DrawingInfo:
+def describe_drawing(image_path: Path, user_idea: str | None = None) -> DrawingInfo:
+    """user_idea: the motion the person typed; the LLM expands it instead of inventing one."""
+    idea = (user_idea or "").strip()[:MAX_IDEA_CHARS]
+    fallback = f"{idea.rstrip('.')}. {STYLE}" if idea else DEFAULT_PROMPT
     if settings.anthropic_api_key:
         ask, name = _ask_claude, "Claude"
     elif settings.gemini_api_key:
         ask, name = _ask_gemini, "Gemini"
     else:
-        return DrawingInfo("a drawing", "scene", DEFAULT_PROMPT, "default")
+        return DrawingInfo("a drawing", "scene", fallback, "default")
+    # replace(), not format(): the instructions contain JSON braces.
+    instructions = INSTRUCTIONS.replace("{idea}", IDEA.replace("{text}", idea.replace('"', "'")) if idea else "")
     try:
-        return ask(image_path)
+        return ask(image_path, instructions)
     except Exception as exc:  # never let captioning break the demo
         log.exception("%s captioning failed; using default prompt", name)
-        note(f"{name} failed ({str(exc).splitlines()[0][:160]}), so the default prompt is used")
-        return DrawingInfo("a drawing", "scene", DEFAULT_PROMPT, "default")
+        note(f"{name} failed ({str(exc).splitlines()[0][:160]}), so " + ("your prompt is used as typed" if idea else "the default prompt is used"))
+        return DrawingInfo("a drawing", "scene", fallback, "default")
 
 
-def _ask_claude(image_path: Path) -> DrawingInfo:
+def _ask_claude(image_path: Path, instructions: str) -> DrawingInfo:
     import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -70,7 +83,7 @@ def _ask_claude(image_path: Path) -> DrawingInfo:
             "role": "user",
             "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_data}},
-                {"type": "text", "text": INSTRUCTIONS},
+                {"type": "text", "text": instructions},
             ],
         }],
     )
@@ -80,7 +93,7 @@ def _ask_claude(image_path: Path) -> DrawingInfo:
     return _parse_reply(text, "claude")
 
 
-def _ask_gemini(image_path: Path) -> DrawingInfo:
+def _ask_gemini(image_path: Path, instructions: str) -> DrawingInfo:
     import httpx
 
     image_data = base64.standard_b64encode(image_path.read_bytes()).decode("utf-8")
@@ -90,7 +103,7 @@ def _ask_gemini(image_path: Path) -> DrawingInfo:
         json={
             "contents": [{"parts": [
                 {"inline_data": {"mime_type": "image/png", "data": image_data}},
-                {"text": INSTRUCTIONS},
+                {"text": instructions},
             ]}],
             "generationConfig": {"responseMimeType": "application/json"},
         },
