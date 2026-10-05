@@ -2,6 +2,7 @@
 
 Draw on paper, take a photo with your phone, and get it back as an animation.
 
+- **Using the app or running the workshop? Read [docs/USER-GUIDE.md](docs/USER-GUIDE.md)**: every feature and how to use it.
 - **Resuming work? Read [docs/HANDOFF.md](docs/HANDOFF.md) first.** It covers model research, current status, blockers, and step-by-step setup guides.
 - Team plan, task board and demo script: **[docs/PLAN.md](docs/PLAN.md)**
 - Presentation deck (how it works + tech stack): **docs/Doodle-Alive-Overview.pptx**
