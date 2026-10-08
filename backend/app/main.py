@@ -202,4 +202,5 @@ async def set_gpu_server_url(
 
 
 app.mount("/media", StaticFiles(directory=settings.outputs_dir), name="media")
-app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
+# Built React app (cd frontend; npm run build). check_dir=False keeps the API usable before the first build.
+app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True, check_dir=False), name="frontend")

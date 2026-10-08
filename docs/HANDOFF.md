@@ -46,7 +46,7 @@ Use **both**. Character mode uses Animated Drawings, which is reliable and quick
 
 | Part | File(s) | Status |
 |---|---|---|
-| Mobile web page: camera, mode picker, optional prompt, loading/error/result, Save | `frontend/index.html`, `app.js`, `styles.css` | ✅ works on the laptop; **not yet tried on a real phone** |
+| Mobile web app (React 19 + Vite + Tailwind v4, VI/EN): live camera, photo/upload/on-screen sketchpad, second drawing, colour-in, mode cards (person/animal/auto/anything), idea chips, video length, check/edit prompt, guess game, "How it was made" flow chart, sound, before/after, Save/Share, remake, local library, #admin panel | `frontend/src/` (feature folders under `features/`); `public/config.js` holds the backend URL | ✅ builds and runs; all flows driven end to end in mobile emulation; **not yet tried on a real phone** |
 | API: submit a job, poll its status, health check, serve media | `backend/app/main.py` | ✅ tested |
 | Pipeline and in-memory job store; falls back to mock if a real model fails | `backend/app/jobs.py` | ✅ tested |
 | Photo clean-up: fix rotation, resize to 1024 px, auto-contrast | `backend/app/preprocess.py` | ✅ basic version; paper detection is task T2 |

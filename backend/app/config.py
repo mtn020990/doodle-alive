@@ -19,7 +19,9 @@ def _env(name: str, default: str = "") -> str:
 @dataclass
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR") or BACKEND_DIR / "data"))
-    frontend_dir: Path = PROJECT_DIR / "frontend"
+    frontend_dir: Path = field(
+        default_factory=lambda: Path(_env("FRONTEND_DIR") or PROJECT_DIR / "frontend" / "dist")
+    )
 
     scene_animator: str = field(default_factory=lambda: _env("SCENE_ANIMATOR", "mock"))
     character_animator: str = field(default_factory=lambda: _env("CHARACTER_ANIMATOR", "mock"))

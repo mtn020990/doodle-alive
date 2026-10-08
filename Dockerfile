@@ -1,6 +1,16 @@
 # Doodle Alive backend (also serves the frontend). Build from the repo root:
 #   docker build -t doodle-alive-api .
 # scripts/deploy-azure.ps1 builds it in Azure with `az acr build`, so no local Docker is needed.
+
+# 1) Build the React frontend (frontend/dist).
+FROM node:22-slim AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# 2) The API, serving the built frontend.
 FROM python:3.12-slim
 
 # /data is a persistent Azure Files share in Azure: uploads, outputs, and the
@@ -15,7 +25,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
-COPY frontend /app/frontend
+COPY --from=web /web/dist /app/frontend/dist
 
 EXPOSE 8000
 # One worker only: jobs are kept in memory in this process.

@@ -259,11 +259,25 @@ function Publish-Frontend {
     Invoke-Az storage blob service-properties update --account-name $storageName --account-key $key `
         --static-website --index-document index.html -o none
 
+    # The React app is built to frontend/dist; config.js is not bundled, so the backend URL is set here.
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'Node.js (npm) is required to build the frontend: https://nodejs.org' }
+    Write-Host '== Building the frontend'
+    Push-Location (Join-Path $root 'frontend')
+    try {
+        # Install when missing, or when package-lock.json changed since the last install.
+        $installed = 'node_modules/.package-lock.json'
+        if (-not (Test-Path $installed) -or (Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item $installed).LastWriteTime) {
+            npm ci; if ($LASTEXITCODE) { throw 'npm ci failed' }
+        }
+        npm run build; if ($LASTEXITCODE) { throw 'Frontend build failed' }
+    } finally {
+        Pop-Location
+    }
+
     $stage = Join-Path $env:TEMP "doodle-alive-web-$(Get-Date -Format 'yyyyMMddHHmmss')"
     try {
         New-Item -ItemType Directory -Path $stage | Out-Null
-        Get-ChildItem (Join-Path $root 'frontend') -File | Where-Object { $_.Name -notlike '.env*' } |
-            Copy-Item -Destination $stage
+        Copy-Item (Join-Path $root 'frontend\dist\*') -Destination $stage -Recurse
         $config = "window.DOODLE_CONFIG = { apiBaseUrl: '$($apiBase -replace "'", "\'")' };`n"
         [IO.File]::WriteAllText((Join-Path $stage 'config.js'), $config)
 
