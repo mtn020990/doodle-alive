@@ -1,146 +1,23 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Doodle Alive</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <main>
-    <h1>Doodle Alive</h1>
-    <p class="lead">Draw something, snap a photo, and watch it move.</p>
-
-    <form id="form">
-      <label class="capture">
-        <input id="photo" type="file" accept="image/*" capture="environment">
-        <span id="captureLabel">📷 Take a photo of your drawing</span>
-        <img id="preview" alt="Your drawing" hidden>
-      </label>
-      <button id="cameraBtn" type="button" class="secondary">🎥 Live camera (finds the paper and snaps by itself)</button>
-
-      <!-- 9. A second drawing: both meet in one AI video -->
-      <div class="second">
-        <label class="second-pick">
-          <input id="photo2" type="file" accept="image/*" capture="environment">
-          <span id="photo2Label">➕ Add a second drawing <small>(they meet in one video)</small></span>
-          <img id="preview2" alt="Your second drawing" hidden>
-        </label>
-        <button id="photo2Remove" type="button" class="link" hidden>✕ Remove second drawing</button>
-      </div>
-
-      <fieldset>
-        <legend>What did you draw?</legend>
-        <label><input type="radio" name="mode" value="character" checked> A person / figure <small>(dances, fastest)</small></label>
-        <label><input type="radio" name="mode" value="animal"> An animal on 4 legs <small>(walks)</small></label>
-        <label><input type="radio" name="mode" value="auto"> Let AI decide</label>
-        <label><input type="radio" name="mode" value="scene"> Anything else <small>(AI video, limited per day)</small></label>
-      </fieldset>
-
-      <label class="prompt">
-        How should it move? <small>(optional)</small>
-        <input id="prompt" type="text" placeholder="e.g. the rocket blasts off into space">
-        <small id="promptHint" class="meta"></small>
-      </label>
-
-      <label id="durationBox" class="duration">
-        <span>Video length: <strong id="durationValue">3 s</strong></span>
-        <input id="duration" type="range" min="2" max="10" step="1" value="3">
-        <small class="meta">AI video only. Longer videos take longer to make.</small>
-      </label>
-
-      <label class="toggle">
-        <input id="paint" type="checkbox"> 🎨 Colour it in first <small>(fills closed shapes with crayon colours)</small>
-      </label>
-
-      <div class="actions">
-        <button id="previewBtn" type="button" class="secondary">✏️ Check prompt first</button>
-        <button id="submit" type="submit">Bring it to life ✨</button>
-      </div>
-    </form>
-
-    <section id="camera" class="camera" hidden>
-      <div class="camera-view">
-        <video id="cameraVideo" autoplay playsinline muted></video>
-        <div class="camera-guide" aria-hidden="true"></div>
-        <p id="cameraHint" class="camera-hint">Fit the paper inside the frame</p>
-      </div>
-      <div class="actions">
-        <button id="cameraCancel" type="button" class="secondary">Cancel</button>
-        <button id="cameraSnap" type="button">📸 Snap now</button>
-      </div>
-    </section>
-
-    <!-- Review the AI's prompt before animating: edit it, ask for a change, or get a different idea -->
-    <section id="review" class="review" hidden>
-      <h2>Check the prompt</h2>
-      <p id="reviewMeta" class="meta"></p>
-      <p id="reviewWarning" class="warning" hidden></p>
-      <textarea id="reviewPrompt" rows="5" aria-label="Prompt for the animation"></textarea>
-      <form id="reviewChangeForm" class="review-change">
-        <input id="reviewChange" type="text" placeholder="Add or change… e.g. the ball rolls on the ground">
-        <button type="submit" class="secondary">Apply</button>
-      </form>
-      <div class="actions">
-        <button id="reviewDifferent" type="button" class="secondary">🎲 Different idea</button>
-        <button id="reviewGo" type="button">Bring it to life ✨</button>
-      </div>
-      <button id="reviewBack" type="button" class="link">← Back</button>
-    </section>
-
-    <section id="status" hidden>
-      <div class="spinner" aria-hidden="true"></div>
-      <p id="statusText">Uploading…</p>
-    </section>
-
-    <section id="game" class="game" hidden>
-      <h2>🤔 The AI guesses… is it</h2>
-      <div id="gameChoices" class="game-choices"></div>
-      <p id="gameResult" class="game-result" hidden></p>
-      <p id="gameScore" class="meta"></p>
-    </section>
-
-    <section id="error" class="error" hidden></section>
-
-    <section id="result" hidden>
-      <p id="warning" class="warning" hidden></p>
-      <div id="media"></div>
-      <p id="meta" class="meta"></p>
-      <div class="actions">
-        <a id="download" class="button" download>Save</a>
-        <button id="again" type="button" class="secondary">Draw another</button>
-      </div>
-      <button id="remake" type="button" class="secondary">✏️ Edit prompt &amp; remake</button>
-      <button id="soundToggle" type="button" class="link">🔊 Sound on</button>
-    </section>
-
-    <section id="flow" class="flow" hidden>
-      <h2>How it was made</h2>
-      <ol id="flowSteps" class="flow-steps"></ol>
-    </section>
-
-    <!-- Team admin: open the page with #admin at the end of the URL -->
-    <section id="admin" class="admin" hidden>
-      <h2>Hugging Face keys</h2>
-      <p class="meta">When a key runs out of free GPU quota, the next one is used automatically. Pick one here to switch now.</p>
-      <form id="adminLogin" class="admin-login">
-        <input id="adminPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN" required>
-        <button type="submit">Open</button>
-      </form>
-      <p id="adminStatus" class="meta" hidden></p>
-      <p id="adminError" class="error" hidden></p>
-      <ul id="adminKeys" class="admin-keys"></ul>
-      <div id="adminServersBox" hidden>
-        <h2>Free GPU servers</h2>
-        <p class="meta">Used after all Hugging Face keys. Run notebooks/ltx_gpu_server.ipynb on Kaggle or Colab and paste the https://….gradio.live link it prints. Leave empty to turn one off.</p>
-        <ul id="adminServers" class="admin-keys"></ul>
-      </div>
-      <button id="adminRefresh" type="button" class="secondary" hidden>Refresh</button>
-    </section>
-  </main>
-  <script src="config.js"></script>
-  <script src="sound.js"></script>
-  <script src="camera.js"></script>
-  <script src="app.js"></script>
-</body>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fff7ec" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1625" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Draw something, snap a photo, and watch it come alive." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Doodle Alive" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Doodle Alive</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Runtime settings (backend URL); not bundled, so a deploy can rewrite it. -->
+    <script src="/config.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

@@ -14,7 +14,7 @@ cd C:\Ngan\Project\doodle-alive
 .\scripts\run.ps1
 ```
 
-The first run creates `backend/.venv`, installs dependencies, and copies `.env.example` to `.env`. Then:
+The first run creates `backend/.venv`, installs dependencies, copies `.env.example` to `.env`, and builds the frontend (needs [Node.js](https://nodejs.org) 20+). Run `.\scripts\run.ps1 -Build` after changing the frontend. Then:
 
 - **Laptop:** open http://localhost:8000
 - **Phone:** open the `http://<laptop-ip>:8000` URL that the script prints. The phone must be on the same Wi-Fi, and you may need to allow Python through the Windows firewall.
@@ -49,7 +49,36 @@ copy frontend\.env.example frontend\.env    # set API_BASE_URL=<backend URL>
 .\scripts\deploy-azure.ps1 -Part character  # optional: Meta AnimatedDrawings service (first build is slow)
 ```
 
-The backend runs on Azure Container Apps (1 replica, since jobs are in memory). The frontend is an Azure Storage static website. `/data` is an Azure Files share, so outputs and the Hugging Face cache (`HF_HOME`) persist. `-Part character` adds a second, internal-only container app; redeploy `-Part backend` afterwards so it gets `AD_SERVICE_URL`. Re-run any part to redeploy. Logs: `az containerapp logs show -n doodle-alive-api -g rg-doodle-alive --follow`.
+The backend runs on Azure Container Apps (1 replica, since jobs are in memory). The frontend is an Azure Storage static website: `-Part frontend` builds it (needs Node.js) and writes the backend URL into `config.js`. `/data` is an Azure Files share, so outputs and the Hugging Face cache (`HF_HOME`) persist. `-Part character` adds a second, internal-only container app; redeploy `-Part backend` afterwards so it gets `AD_SERVICE_URL`. Re-run any part to redeploy. Logs: `az containerapp logs show -n doodle-alive-api -g rg-doodle-alive --follow`.
+
+## Frontend development
+
+React 19 + TypeScript + Vite + Tailwind CSS v4, with Motion for animation. Vietnamese and English UI.
+
+```powershell
+cd frontend
+npm install
+npm run dev        # http://localhost:5173 (also on the LAN); proxies /api and /media to :8000
+npm run typecheck; npm run lint; npm run build
+```
+
+Keep the backend running (`.\scripts\run.ps1`) while using `npm run dev`.
+
+```
+frontend/src/
+  app/              App, providers, layout (header, bottom nav)
+  features/
+    create/         3-step wizard: drawing → motion (+ check prompt) → magic
+    camera/         live camera that finds the paper and snaps by itself
+    draw/           on-screen sketchpad
+    game/           "Guess my drawing" while the animation is made
+    pipeline/       "How it was made" flow chart
+    result/         animation view, before/after, save/share
+    library/        creations saved in this browser (localStorage)
+    admin/          #admin panel: Hugging Face keys, free GPU servers
+  shared/           api client, i18n (vi/en), sound, ui primitives, hooks, utils
+  styles/           Tailwind theme tokens and animations
+```
 
 ## Tests
 
@@ -65,7 +94,7 @@ backend/app/        FastAPI app, pipeline, providers/
 character-service/  Meta AnimatedDrawings as an HTTP service (Docker, deployed to Azure)
 notebooks/          free Kaggle/Colab GPU server running LTX-Video (same API as the HF Space)
 backend/tests/      API tests (use the mock animator)
-frontend/           mobile web page (no build step)
+frontend/           React mobile web app (built to frontend/dist)
 scripts/            run.ps1, inspect_space.py
 docs/PLAN.md        workshop plan
 ```

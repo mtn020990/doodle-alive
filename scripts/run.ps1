@@ -1,9 +1,28 @@
 # Starts Doodle Alive on port 8000, reachable from phones on the same Wi-Fi.
-# First run creates backend/.venv and installs dependencies.
+# First run creates backend/.venv, installs dependencies, and builds the frontend.
+# Pass -Build to rebuild the frontend after changing it.
+param([switch]$Build)
 $ErrorActionPreference = 'Stop'
-$backend = Join-Path $PSScriptRoot '..\backend'
-Set-Location $backend
+$root = Join-Path $PSScriptRoot '..'
+$frontend = Join-Path $root 'frontend'
+$backend = Join-Path $root 'backend'
 
+if ($Build -or -not (Test-Path (Join-Path $frontend 'dist\index.html'))) {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw 'Node.js (npm) is required to build the frontend: https://nodejs.org'
+    }
+    Push-Location $frontend
+    try {
+        # Install when missing, or when package-lock.json changed since the last install.
+        $installed = 'node_modules/.package-lock.json'
+        if (-not (Test-Path $installed) -or (Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item $installed).LastWriteTime) {
+            npm ci; if ($LASTEXITCODE) { throw 'npm ci failed' }
+        }
+        npm run build; if ($LASTEXITCODE) { throw 'Frontend build failed' }
+    } finally { Pop-Location }
+}
+
+Set-Location $backend
 if (-not (Test-Path '.venv')) {
     python -m venv .venv
     .\.venv\Scripts\python.exe -m pip install -r requirements.txt

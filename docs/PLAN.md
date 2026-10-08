@@ -40,7 +40,7 @@
 | `backend/app/prompting.py` | Claude vision → `{subject, kind, motion_prompt}` |
 | `backend/app/providers/*.py` | one file per animator; register new ones in `providers/__init__.py` |
 | `backend/app/config.py` + `.env` | every setting lives here |
-| `frontend/` | plain HTML/CSS/JS mobile page, no build step |
+| `frontend/` | React + Vite + Tailwind mobile app (`npm run dev` / `npm run build` → `frontend/dist`, served by FastAPI) |
 | `scripts/run.ps1` | one-command start; prints the URL to open on phones |
 | `scripts/inspect_space.py` | prints a Hugging Face Space's API parameters |
 

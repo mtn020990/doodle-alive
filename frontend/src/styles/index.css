@@ -1,0 +1,140 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/baloo-2';
+@import '@fontsource/be-vietnam-pro/400.css';
+@import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
+@import './animations.css';
+
+/* Raw palette: light by default, swapped for dark mode below. */
+:root {
+  --paper: #fff7ec;
+  --paper-dot: #f1e3cf;
+  --card: #ffffff;
+  --sunken: #fbf0e1;
+  --ink: #2b2140;
+  --muted: #6b5f7d;
+  --line: #2b2140;
+  --soft-line: #eadcc8;
+  --coral: #ff6b4a;
+  --coral-ink: #ffffff;
+  --sun-ink: #2b2140;
+  --grape: #7c5cff;
+  --mint: #22b893;
+  --sun: #ffc93c;
+  --sky: #3fb5e8;
+  --danger-bg: #ffe3df;
+  --danger-ink: #9b2414;
+  --warn-bg: #fff1c7;
+  --warn-ink: #6b4e00;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a1625;
+    --paper-dot: #262036;
+    --card: #241d33;
+    --sunken: #1f1a2c;
+    --ink: #f7efe5;
+    --muted: #b7accb;
+    --line: #0d0a14;
+    --soft-line: #3a3150;
+    --coral: #ff7a5c;
+    --coral-ink: #1a1625;
+    --grape: #9b82ff;
+    --mint: #3ad6ac;
+    --sun: #ffd166;
+    --sky: #5cc8f2;
+    --danger-bg: #4a1f1a;
+    --danger-ink: #ffc2b8;
+    --warn-bg: #43380f;
+    --warn-ink: #ffe59a;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-soft-line: var(--soft-line);
+  --color-coral: var(--coral);
+  --color-coral-ink: var(--coral-ink);
+  --color-sun-ink: var(--sun-ink);
+  --color-grape: var(--grape);
+  --color-mint: var(--mint);
+  --color-sun: var(--sun);
+  --color-sky: var(--sky);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-ink: var(--danger-ink);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-ink: var(--warn-ink);
+}
+
+@theme {
+  --font-display: 'Baloo 2 Variable', 'Baloo 2', ui-rounded, system-ui, sans-serif;
+  --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-blob: 1.75rem;
+  --shadow-sticker: 3px 4px 0 0 var(--line);
+  --shadow-sticker-lg: 5px 6px 0 0 var(--line);
+  --shadow-sticker-sm: 2px 2px 0 0 var(--line);
+}
+
+/* A hand-cut "sticker" outline; pair it with a shadow-sticker* utility. */
+@utility sticker {
+  border: 2.5px solid var(--line);
+}
+
+@utility pressable {
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+  &:active:not(:disabled) {
+    transform: translate(2px, 3px);
+    box-shadow: 1px 1px 0 0 var(--line);
+  }
+}
+
+@utility pt-safe {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    min-height: 100dvh;
+    background-image: radial-gradient(var(--paper-dot) 1.4px, transparent 1.4px);
+    background-size: 22px 22px;
+    overscroll-behavior-y: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display leading-tight;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--grape);
+    outline-offset: 3px;
+  }
+
+  button,
+  [role='button'],
+  label {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
