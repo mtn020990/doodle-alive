@@ -76,7 +76,6 @@ export function ResultView({ result, footer, celebrate = true }: ResultViewProps
             src={result.outputUrl}
             isVideo={result.isVideo}
             alt={result.subject ?? t('result.alt')}
-            className="max-h-[62dvh]"
           />
         )}
       </Card>

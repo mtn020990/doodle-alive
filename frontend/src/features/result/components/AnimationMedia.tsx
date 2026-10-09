@@ -3,33 +3,34 @@ import { useState } from 'react';
 import { useI18n } from '@/shared/i18n';
 import { cn } from '@/shared/lib/cn';
 
+/** Tallest the animation may be, so all of it stays on screen even on short windows. */
+export const SCREEN_FIT = 'max-h-[55dvh]';
+
 interface AnimationMediaProps {
   src: string;
   isVideo: boolean;
   alt: string;
   controls?: boolean;
-  className?: string;
+  /** Fill a sized parent (before/after view) instead of fitting the screen height. */
+  fill?: boolean;
 }
 
 type Status = 'loading' | 'ready' | 'missing';
 
-export function AnimationMedia({
-  src,
-  isVideo,
-  alt,
-  controls = true,
-  className,
-}: AnimationMediaProps) {
+export function AnimationMedia({ src, isVideo, alt, controls = true, fill }: AnimationMediaProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<Status>('loading');
+  // The size limit sits on the image itself: object-contain then shrinks the whole
+  // animation to fit, instead of a wrapper cropping it.
   const media = cn(
-    'block h-full w-full object-contain transition-opacity duration-300',
+    'block w-full object-contain transition-opacity duration-300',
+    fill ? 'h-full' : cn('mx-auto', SCREEN_FIT),
     status === 'ready' ? 'opacity-100' : 'opacity-0',
   );
   const events = { onError: () => setStatus('missing') };
 
   return (
-    <div className={cn('relative', status !== 'ready' && 'min-h-64', className)}>
+    <div className={cn(fill ? 'absolute inset-0' : 'relative', status !== 'ready' && 'min-h-64')}>
       {status === 'loading' && (
         <div
           aria-hidden="true"

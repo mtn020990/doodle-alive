@@ -1,41 +1,48 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { canvasToBlob } from '@/shared/lib/image';
+import { traceShape, type Point, type ShapeKind } from '../lib/shapes';
 
-/** Strokes are stored in a fixed square space so the canvas can resize freely. */
-export const CANVAS_SIZE = 1024;
 const PAPER = '#ffffff';
+/** Shorter drags than this (in canvas pixels) are taps, not shapes. */
+const MIN_SHAPE = 12;
 
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface Stroke {
-  color: string;
-  size: number;
-  points: Point[];
-}
+export type Tool = 'pen' | 'eraser' | ShapeKind;
 
 export interface Brush {
   color: string;
   size: number;
-  eraser: boolean;
+  tool: Tool;
 }
 
-function paintStroke(ctx: CanvasRenderingContext2D, { color, size, points }: Stroke) {
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = size;
+/** Canvas size in its own pixels; strokes are stored in this space so the element can resize freely. */
+export interface CanvasSize {
+  width: number;
+  height: number;
+}
+
+type Stroke =
+  | { type: 'free'; color: string; size: number; points: Point[] }
+  | { type: 'shape'; color: string; size: number; shape: ShapeKind; from: Point; to: Point };
+
+function paintStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
+  ctx.strokeStyle = stroke.color;
+  ctx.fillStyle = stroke.color;
+  ctx.lineWidth = stroke.size;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  ctx.beginPath();
+  if (stroke.type === 'shape') {
+    traceShape(ctx, stroke.shape, stroke.from, stroke.to);
+    ctx.stroke();
+    return;
+  }
+  const { points, size } = stroke;
   if (points.length === 1) {
-    ctx.beginPath();
     ctx.arc(points[0].x, points[0].y, size / 2, 0, Math.PI * 2);
     ctx.fill();
     return;
   }
   // Smooth the line with quadratic curves through the midpoints.
-  ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (let i = 1; i < points.length - 1; i++) {
     const mid = { x: (points[i].x + points[i + 1].x) / 2, y: (points[i].y + points[i + 1].y) / 2 };
@@ -46,24 +53,25 @@ function paintStroke(ctx: CanvasRenderingContext2D, { color, size, points }: Str
   ctx.stroke();
 }
 
-function paintAll(ctx: CanvasRenderingContext2D, strokes: Stroke[]) {
+function paintAll(ctx: CanvasRenderingContext2D, size: CanvasSize, strokes: Stroke[]) {
   ctx.fillStyle = PAPER;
-  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  ctx.fillRect(0, 0, size.width, size.height);
   strokes.forEach((s) => paintStroke(ctx, s));
 }
 
-/** Pointer position in the fixed canvas space. */
+/** Pointer position in canvas pixels. */
 function toCanvas(
-  rect: DOMRect,
+  canvas: HTMLCanvasElement,
   { clientX, clientY }: { clientX: number; clientY: number },
 ): Point {
+  const rect = canvas.getBoundingClientRect();
   return {
-    x: ((clientX - rect.left) / rect.width) * CANVAS_SIZE,
-    y: ((clientY - rect.top) / rect.height) * CANVAS_SIZE,
+    x: ((clientX - rect.left) / rect.width) * canvas.width,
+    y: ((clientY - rect.top) / rect.height) * canvas.height,
   };
 }
 
-export function useDrawing(brush: Brush) {
+export function useDrawing(brush: Brush, size: CanvasSize) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Stroke[]>([]);
   const active = useRef<Stroke | null>(null);
@@ -71,36 +79,54 @@ export function useDrawing(brush: Brush) {
 
   const redraw = useCallback(() => {
     const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) paintAll(ctx, active.current ? [...strokes.current, active.current] : strokes.current);
-  }, []);
+    const all = active.current ? [...strokes.current, active.current] : strokes.current;
+    if (ctx) paintAll(ctx, size, all);
+  }, [size]);
 
   useEffect(redraw, [redraw]);
 
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    active.current = {
-      color: brush.eraser ? PAPER : brush.color,
-      size: brush.eraser ? brush.size * 2.5 : brush.size,
-      points: [toCanvas(e.currentTarget.getBoundingClientRect(), e)],
-    };
+    const at = toCanvas(e.currentTarget, e);
+    const { tool, color } = brush;
+    active.current =
+      tool === 'pen' || tool === 'eraser'
+        ? {
+            type: 'free',
+            color: tool === 'eraser' ? PAPER : color,
+            size: tool === 'eraser' ? brush.size * 2.5 : brush.size,
+            points: [at],
+          }
+        : { type: 'shape', color, size: brush.size, shape: tool, from: at, to: at };
     redraw();
   };
 
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
-    if (!active.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    // Coalesced events give every point the hardware saw, for smoother lines.
-    const events = e.nativeEvent.getCoalescedEvents?.() ?? [];
-    for (const ev of events.length ? events : [e]) active.current.points.push(toCanvas(rect, ev));
+    const stroke = active.current;
+    if (!stroke) return;
+    if (stroke.type === 'shape') {
+      stroke.to = toCanvas(e.currentTarget, e); // live preview while dragging
+    } else {
+      // Coalesced events give every point the hardware saw, for smoother lines.
+      const events = e.nativeEvent.getCoalescedEvents?.() ?? [];
+      for (const ev of events.length ? events : [e])
+        stroke.points.push(toCanvas(e.currentTarget, ev));
+    }
     redraw();
   };
 
   const onPointerUp = () => {
-    if (!active.current) return;
-    strokes.current = [...strokes.current, active.current];
+    const stroke = active.current;
+    if (!stroke) return;
     active.current = null;
-    setCount(strokes.current.length);
+    const tooSmall =
+      stroke.type === 'shape' &&
+      Math.hypot(stroke.to.x - stroke.from.x, stroke.to.y - stroke.from.y) < MIN_SHAPE;
+    if (!tooSmall) {
+      strokes.current = [...strokes.current, stroke];
+      setCount(strokes.current.length);
+    }
     redraw();
   };
 
@@ -118,8 +144,9 @@ export function useDrawing(brush: Brush) {
 
   const toBlob = () => {
     const out = document.createElement('canvas');
-    out.width = out.height = CANVAS_SIZE;
-    paintAll(out.getContext('2d')!, strokes.current);
+    out.width = size.width;
+    out.height = size.height;
+    paintAll(out.getContext('2d')!, size, strokes.current);
     return canvasToBlob(out, 'image/png');
   };
 

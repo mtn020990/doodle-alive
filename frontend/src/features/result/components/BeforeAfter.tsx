@@ -1,7 +1,7 @@
 import { MoveHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '@/shared/i18n';
-import { AnimationMedia } from './AnimationMedia';
+import { AnimationMedia, SCREEN_FIT } from './AnimationMedia';
 
 interface BeforeAfterProps {
   beforeSrc: string;
@@ -15,13 +15,15 @@ export function BeforeAfter({ beforeSrc, afterSrc, isVideo }: BeforeAfterProps) 
   const [split, setSplit] = useState(50);
 
   return (
-    <div className="relative isolate aspect-square w-full touch-pan-y overflow-hidden bg-white">
+    <div
+      className={`relative isolate aspect-square w-full touch-pan-y overflow-hidden bg-white ${SCREEN_FIT}`}
+    >
       <AnimationMedia
         src={afterSrc}
         isVideo={isVideo}
         alt={t('result.alt')}
         controls={false}
-        className="absolute inset-0"
+        fill
       />
       <img
         src={beforeSrc}
