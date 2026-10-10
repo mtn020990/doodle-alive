@@ -26,7 +26,9 @@ export function AnimationMedia({ src, isVideo, alt, controls = true, fill }: Ani
     'block object-contain transition-opacity duration-300',
     fill
       ? 'h-full w-full'
-      : cn('mx-auto', SCREEN_FIT, isVideo ? 'h-auto w-auto max-w-full' : 'w-full'),
+      : isVideo
+        ? 'mx-auto h-auto w-full max-w-full'
+        : cn('mx-auto w-full', SCREEN_FIT),
     status === 'ready' ? 'opacity-100' : 'opacity-0',
   );
   const events = { onError: () => setStatus('missing') };
