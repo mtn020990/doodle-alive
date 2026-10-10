@@ -1,4 +1,4 @@
-import { ImagePlus, Pencil, X } from 'lucide-react';
+import { ImagePlus, Images, Pencil, X } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { useObjectUrl } from '@/shared/hooks/useObjectUrl';
 import { useI18n } from '@/shared/i18n';
@@ -9,27 +9,40 @@ interface SecondDrawingProps {
   image: PickedImage | null;
   onFile: (e: ChangeEvent<HTMLInputElement>) => void;
   onDraw: () => void;
+  onSample: () => void;
+  onEdit: () => void;
   onRemove: () => void;
 }
 
 /** Optional second drawing: both meet in one AI video. */
-export function SecondDrawing({ image, onFile, onDraw, onRemove }: SecondDrawingProps) {
+export function SecondDrawing({
+  image,
+  onFile,
+  onDraw,
+  onSample,
+  onEdit,
+  onRemove,
+}: SecondDrawingProps) {
   const { t } = useI18n();
   const preview = useObjectUrl(image?.blob);
 
   if (image && preview) {
     return (
-      <div className="flex items-center gap-3 rounded-3xl border-2 border-line bg-card p-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-3xl border-2 border-line bg-card p-3">
         <img
           src={preview}
           alt={t('source.secondAlt')}
           className="size-16 shrink-0 rotate-3 rounded-xl border-2 border-line bg-white object-cover"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-32">
           <p className="font-display text-lg font-bold">{t('source.secondAlt')}</p>
           <p className="text-sm text-muted">{t('source.secondHint')}</p>
         </div>
-        <IconButton label={t('source.secondRemove')} icon={<X />} onClick={onRemove} />
+        <div className="ml-auto flex gap-2">
+          <IconButton label={t('source.editSecond')} icon={<Pencil />} onClick={onEdit} />
+          <IconButton label={t('source.samples')} icon={<Images />} onClick={onSample} />
+          <IconButton label={t('source.secondRemove')} icon={<X />} onClick={onRemove} />
+        </div>
       </div>
     );
   }
@@ -53,6 +66,7 @@ export function SecondDrawing({ image, onFile, onDraw, onRemove }: SecondDrawing
         </span>
       </label>
       <IconButton label={t('source.draw')} icon={<Pencil />} onClick={onDraw} />
+      <IconButton label={t('source.samples')} icon={<Images />} onClick={onSample} />
     </div>
   );
 }

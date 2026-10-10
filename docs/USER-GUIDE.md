@@ -55,6 +55,15 @@ If a person or animal can't be found in the drawing, the app makes an AI video i
 
 **Tips for good results:** use a thick dark marker, white paper and good light, keep the whole sheet in the photo, and avoid a white table, because the paper's edges need to be visible.
 
+### Sample drawings
+No drawing ready? Tap **Sample drawings** (**Hình mẫu**) to choose from 18 drawings: a person, baby, cartoon robot, eight animals (cat, dog, dinosaur, rabbit, elephant, lion, bear, turtle), a bird, or other pictures (rocket, flower, fish, butterfly, house and car). The selected sample appears in the preview. Tap **Continue**, choose the appropriate motion mode and animate it just like a photo. Use **A person / figure** for the person, **An animal on 4 legs** for suitable four-legged animals, and **Anything else** for the other samples.
+
+You can reopen **Sample drawings** to replace the main image, or use the sample icon beside **Add a second drawing** to choose a second sample. Closing the picker without choosing leaves your drawings unchanged.
+
+Choose **Uncoloured** (**Không tô màu**) for black outlines on white paper, or **Coloured** (**Có tô màu**) for the coloured version. The previews and the selected image use that version; this is separate from the backend's **Colour it in first** option.
+
+After selecting a sample, tap **Draw on image** (**Vẽ tiếp**) to open it in the sketchpad. Use the pen, colours and shapes to add details, or the eraser to remove parts of the original image. **Undo** reverses your latest stroke or erase; **Clear** clears the whole paper and can also be undone. Tap **Done** to save the edited image; closing or pressing Escape discards the changes. You can reopen the editor to continue from your saved image. The pencil beside a selected second drawing edits that drawing as well. **Draw now** still starts a new blank drawing.
+
 ### Add a second drawing
 After the first photo, tap **Add a second drawing** (or its pencil to draw it), for example a dog on one sheet and a ball on another. The two drawings are put side by side, and the AI makes **one video where they meet**, for example the dog runs over and catches the ball. Two drawings always become an AI video (**Anything else**). Tap its **✕** to remove it.
 

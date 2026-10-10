@@ -10,11 +10,19 @@ interface DrawToolbarProps {
   brush: Brush;
   onBrushChange: (brush: Brush) => void;
   canUndo: boolean;
+  canClear: boolean;
   onUndo: () => void;
   onClear: () => void;
 }
 
-export function DrawToolbar({ brush, onBrushChange, canUndo, onUndo, onClear }: DrawToolbarProps) {
+export function DrawToolbar({
+  brush,
+  onBrushChange,
+  canUndo,
+  canClear,
+  onUndo,
+  onClear,
+}: DrawToolbarProps) {
   const { t } = useI18n();
   const set = (patch: Partial<Brush>) => onBrushChange({ ...brush, ...patch });
   const erasing = brush.tool === 'eraser';
@@ -43,7 +51,7 @@ export function DrawToolbar({ brush, onBrushChange, canUndo, onUndo, onClear }: 
           <IconButton
             label={t('draw.clear')}
             icon={<Trash2 />}
-            disabled={!canUndo}
+            disabled={!canClear}
             onClick={onClear}
           />
         </div>

@@ -21,10 +21,16 @@ export interface CanvasSize {
 }
 
 type Stroke =
+  | { type: 'clear' }
   | { type: 'free'; color: string; size: number; points: Point[] }
   | { type: 'shape'; color: string; size: number; shape: ShapeKind; from: Point; to: Point };
 
 function paintStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
+  if (stroke.type === 'clear') {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    return;
+  }
   ctx.strokeStyle = stroke.color;
   ctx.fillStyle = stroke.color;
   ctx.lineWidth = stroke.size;
@@ -53,9 +59,15 @@ function paintStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
   ctx.stroke();
 }
 
-function paintAll(ctx: CanvasRenderingContext2D, size: CanvasSize, strokes: Stroke[]) {
+function paintAll(
+  ctx: CanvasRenderingContext2D,
+  size: CanvasSize,
+  strokes: Stroke[],
+  background?: HTMLImageElement,
+) {
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, size.width, size.height);
+  if (background) ctx.drawImage(background, 0, 0, size.width, size.height);
   strokes.forEach((s) => paintStroke(ctx, s));
 }
 
@@ -71,17 +83,24 @@ function toCanvas(
   };
 }
 
-export function useDrawing(brush: Brush, size: CanvasSize) {
+export function useDrawing(brush: Brush, size: CanvasSize, background?: HTMLImageElement) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Stroke[]>([]);
   const active = useRef<Stroke | null>(null);
-  const [count, setCount] = useState(0);
+  const [history, setHistory] = useState({ count: 0, cleared: false });
+
+  const updateHistory = () => {
+    setHistory({
+      count: strokes.current.length,
+      cleared: strokes.current.at(-1)?.type === 'clear',
+    });
+  };
 
   const redraw = useCallback(() => {
     const ctx = canvasRef.current?.getContext('2d');
     const all = active.current ? [...strokes.current, active.current] : strokes.current;
-    if (ctx) paintAll(ctx, size, all);
-  }, [size]);
+    if (ctx) paintAll(ctx, size, all, background);
+  }, [size, background]);
 
   useEffect(redraw, [redraw]);
 
@@ -104,7 +123,7 @@ export function useDrawing(brush: Brush, size: CanvasSize) {
 
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
     const stroke = active.current;
-    if (!stroke) return;
+    if (!stroke || stroke.type === 'clear') return;
     if (stroke.type === 'shape') {
       stroke.to = toCanvas(e.currentTarget, e); // live preview while dragging
     } else {
@@ -125,34 +144,41 @@ export function useDrawing(brush: Brush, size: CanvasSize) {
       Math.hypot(stroke.to.x - stroke.from.x, stroke.to.y - stroke.from.y) < MIN_SHAPE;
     if (!tooSmall) {
       strokes.current = [...strokes.current, stroke];
-      setCount(strokes.current.length);
+      updateHistory();
     }
     redraw();
   };
 
   const undo = () => {
+    active.current = null;
     strokes.current = strokes.current.slice(0, -1);
-    setCount(strokes.current.length);
+    updateHistory();
     redraw();
   };
 
   const clear = () => {
-    strokes.current = [];
-    setCount(0);
+    active.current = null;
+    strokes.current = [...strokes.current, { type: 'clear' }];
+    updateHistory();
     redraw();
   };
 
   const toBlob = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) throw new Error('Drawing canvas is not ready');
     const out = document.createElement('canvas');
     out.width = size.width;
     out.height = size.height;
-    paintAll(out.getContext('2d')!, size, strokes.current);
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('Could not create drawing canvas');
+    ctx.drawImage(canvas, 0, 0);
     return canvasToBlob(out, 'image/png');
   };
 
   return {
     canvasRef,
-    isEmpty: count === 0,
+    isEmpty: (history.count === 0 && !background) || history.cleared,
+    canUndo: history.count > 0,
     undo,
     clear,
     toBlob,

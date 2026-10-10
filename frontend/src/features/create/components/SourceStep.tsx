@@ -1,13 +1,13 @@
-import { ArrowRight, Camera, ImageUp, Lightbulb, Pencil, Video } from 'lucide-react';
-import { useState, type ChangeEvent } from 'react';
+import { ArrowRight, Camera, Images, ImageUp, Lightbulb, Pencil, Video } from 'lucide-react';
+import { useState, type ChangeEvent, type ComponentType } from 'react';
 import { LiveCamera, liveCameraSupported } from '@/features/camera';
-import { DrawPad } from '@/features/draw';
+import { DrawPad, loadSamplePicker, type SamplePickerProps } from '@/features/draw';
 import { Mascot, Sparkle } from '@/shared/assets/illustrations';
 import { useObjectUrl } from '@/shared/hooks/useObjectUrl';
 import { useI18n } from '@/shared/i18n';
 import { cn } from '@/shared/lib/cn';
 import { makeThumbnail } from '@/shared/lib/image';
-import { Alert, Button, Card, Sheet } from '@/shared/ui';
+import { Alert, Button, Card, Sheet, Spinner } from '@/shared/ui';
 import type { PickedImage } from '../types';
 import { SecondDrawing } from './SecondDrawing';
 import { SourceChip, SourceTile, type SourceOption } from './SourceOption';
@@ -22,6 +22,7 @@ interface SourceStepProps {
 }
 
 type Target = 'main' | 'second';
+type DrawingSession = { target: Target; image: PickedImage | null };
 
 async function toPicked(blob: Blob, fileName: string): Promise<PickedImage> {
   return { blob, fileName, thumb: await makeThumbnail(blob) };
@@ -29,11 +30,30 @@ async function toPicked(blob: Blob, fileName: string): Promise<PickedImage> {
 
 export function SourceStep({ image, second, onPick, onPickSecond, onNext }: SourceStepProps) {
   const { t } = useI18n();
-  const [drawFor, setDrawFor] = useState<Target | null>(null);
+  const [drawing, setDrawing] = useState<DrawingSession | null>(null);
+  const [samplesFor, setSamplesFor] = useState<Target | null>(null);
+  const [SamplePicker, setSamplePicker] = useState<ComponentType<SamplePickerProps> | null>(null);
+  const [samplePickerLoading, setSamplePickerLoading] = useState(false);
+  const [samplePickerFailed, setSamplePickerFailed] = useState(false);
   const [camera, setCamera] = useState(false);
   const [invalid, setInvalid] = useState(false);
   const preview = useObjectUrl(image?.blob);
   const live = liveCameraSupported();
+
+  const openSamples = async (target: Target) => {
+    setSamplesFor(target);
+    setSamplePickerFailed(false);
+    if (SamplePicker) return;
+    setSamplePickerLoading(true);
+    try {
+      const picker = await loadSamplePicker();
+      setSamplePicker(() => picker);
+    } catch {
+      setSamplePickerFailed(true);
+    } finally {
+      setSamplePickerLoading(false);
+    }
+  };
 
   const accept = async (target: Target, blob: Blob, fileName: string) => {
     setInvalid(false);
@@ -72,11 +92,26 @@ export function SourceStep({ image, second, onPick, onPickSecond, onNext }: Sour
       icon: <Pencil />,
       label: t('source.draw'),
       hint: t('source.drawHint'),
-      onClick: () => setDrawFor('main'),
+      onClick: () => setDrawing({ target: 'main', image: null }),
     },
   ].filter(Boolean) as SourceOption[];
   const [primary, ...others] = options;
   const tones = ['bg-sky text-[#10283a]', 'bg-sun text-sun-ink', 'bg-mint text-[#0b2a22]'];
+  const sampleOption: SourceOption = {
+    key: 'samples',
+    icon: <Images />,
+    label: t('source.samples'),
+    hint: t('source.samplesHint'),
+    onClick: () => void openSamples('main'),
+  };
+  const editOption: SourceOption = {
+    key: 'edit',
+    icon: <Pencil />,
+    label: t('source.edit'),
+    hint: t('source.editHint'),
+    onClick: () => setDrawing({ target: 'main', image }),
+  };
+  const closeDrawing = () => setDrawing(null);
 
   return (
     <div className="space-y-6">
@@ -91,7 +126,7 @@ export function SourceStep({ image, second, onPick, onPickSecond, onNext }: Sour
             />
           </Card>
           <div className="flex flex-wrap justify-center gap-2">
-            {options.map((option) => (
+            {[...options, sampleOption, editOption].map((option) => (
               <SourceChip key={option.key} option={option} onFile={onFile} />
             ))}
           </div>
@@ -99,7 +134,9 @@ export function SourceStep({ image, second, onPick, onPickSecond, onNext }: Sour
           <SecondDrawing
             image={second}
             onFile={fileHandler('second')}
-            onDraw={() => setDrawFor('second')}
+            onDraw={() => setDrawing({ target: 'second', image: null })}
+            onSample={() => void openSamples('second')}
+            onEdit={() => setDrawing({ target: 'second', image: second })}
             onRemove={() => onPickSecond(null)}
           />
 
@@ -143,6 +180,7 @@ export function SourceStep({ image, second, onPick, onPickSecond, onNext }: Sour
                 />
               ))}
             </div>
+            <SourceTile option={sampleOption} onFile={onFile} tone="bg-card text-ink" />
           </div>
 
           <p className="flex items-start gap-2 rounded-2xl bg-sunken p-4 text-sm text-muted">
@@ -154,13 +192,50 @@ export function SourceStep({ image, second, onPick, onPickSecond, onNext }: Sour
 
       {invalid && <Alert tone="danger">{t('source.notImage')}</Alert>}
 
-      <Sheet open={drawFor !== null} onClose={() => setDrawFor(null)} label={t('draw.title')}>
+      <Sheet
+        open={samplesFor !== null}
+        onClose={() => setSamplesFor(null)}
+        label={t('samples.title')}
+      >
+        {samplePickerLoading ? (
+          <p role="status" className="flex items-center gap-2 p-4 text-muted">
+            <Spinner /> {t('samples.loading')}
+          </p>
+        ) : samplePickerFailed ? (
+          <div className="space-y-3 p-4">
+            <Alert tone="danger">{t('samples.loadError')}</Alert>
+            <Button onClick={() => samplesFor && void openSamples(samplesFor)}>
+              {t('samples.retry')}
+            </Button>
+          </div>
+        ) : SamplePicker ? (
+          <SamplePicker
+            open={samplesFor !== null}
+            onCancel={() => setSamplesFor(null)}
+            onDone={(picked) => {
+              if (samplesFor === null) return;
+              setInvalid(false);
+              if (samplesFor === 'main') onPick(picked);
+              else onPickSecond(picked);
+              setSamplesFor(null);
+            }}
+          />
+        ) : null}
+      </Sheet>
+
+      <Sheet open={drawing !== null} onClose={closeDrawing} label={t('draw.title')}>
         <DrawPad
-          onCancel={() => setDrawFor(null)}
+          open={drawing !== null}
+          initialImage={drawing?.image?.blob}
+          onCancel={closeDrawing}
           onDone={(blob) => {
-            const target = drawFor ?? 'main';
-            setDrawFor(null);
-            void accept(target, blob, 'drawing.png');
+            if (drawing === null) return;
+            const { target, image: original } = drawing;
+            closeDrawing();
+            const fileName = original
+              ? original.fileName.replace(/\.[^.]+$/, '') + '.png'
+              : 'drawing.png';
+            void accept(target, blob, fileName);
           }}
         />
       </Sheet>

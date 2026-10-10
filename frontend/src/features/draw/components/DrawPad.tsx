@@ -1,7 +1,8 @@
 import { Check, X } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useObjectUrl } from '@/shared/hooks/useObjectUrl';
 import { useI18n } from '@/shared/i18n';
-import { Button, IconButton } from '@/shared/ui';
+import { Alert, Button, IconButton, Spinner } from '@/shared/ui';
 import { useDrawing, type Brush, type CanvasSize } from '../hooks/useDrawing';
 import { COLORS, SIZES } from '../lib/brushes';
 import { DrawToolbar } from './DrawToolbar';
@@ -21,6 +22,77 @@ function paperFor(width: number, height: number): CanvasSize {
 interface DrawPadProps {
   onDone: (drawing: Blob) => void;
   onCancel: () => void;
+  initialImage?: Blob;
+  open?: boolean;
+}
+
+export function DrawPad({ initialImage, ...props }: DrawPadProps) {
+  const url = useObjectUrl(initialImage);
+  return url ? <ImageDrawPad key={url} url={url} {...props} /> : <DrawEditor {...props} />;
+}
+
+function ImageDrawPad({ url, ...props }: Omit<DrawPadProps, 'initialImage'> & { url: string }) {
+  const { t } = useI18n();
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const image = new Image();
+    image.src = url;
+    image.decode().then(
+      () => {
+        if (active) setImage(image);
+      },
+      () => {
+        if (active) setFailed(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [url, attempt]);
+
+  if (image) {
+    const scale = Math.min(1, LONG_SIDE / Math.max(image.naturalWidth, image.naturalHeight));
+    return (
+      <DrawEditor
+        {...props}
+        background={image}
+        initialSize={{
+          width: Math.max(1, Math.round(image.naturalWidth * scale)),
+          height: Math.max(1, Math.round(image.naturalHeight * scale)),
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col gap-4 px-4 pt-safe pb-safe">
+      <header className="flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-extrabold">{t('draw.title')}</h2>
+        <IconButton label={t('draw.cancel')} icon={<X />} onClick={props.onCancel} />
+      </header>
+      {failed ? (
+        <>
+          <Alert tone="danger">{t('draw.loadError')}</Alert>
+          <Button
+            onClick={() => {
+              setFailed(false);
+              setAttempt((current) => current + 1);
+            }}
+          >
+            {t('draw.retry')}
+          </Button>
+        </>
+      ) : (
+        <p role="status" className="flex items-center gap-2 text-muted">
+          <Spinner /> {t('draw.loading')}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -28,19 +100,43 @@ interface DrawPadProps {
  * Its shape is measured once when the pad opens and then kept, so strokes stay put if
  * the phone is rotated (the paper just scales to fit).
  */
-export function DrawPad({ onDone, onCancel }: DrawPadProps) {
+function DrawEditor({
+  onDone,
+  onCancel,
+  open = true,
+  background,
+  initialSize,
+}: Omit<DrawPadProps, 'initialImage'> & {
+  background?: HTMLImageElement;
+  initialSize?: CanvasSize;
+}) {
   const { t } = useI18n();
   const [brush, setBrush] = useState<Brush>({
     color: COLORS[0].value,
     size: SIZES[1].value,
     tool: 'pen',
   });
-  const [paper, setPaper] = useState<CanvasSize | null>(null);
-  const { canvasRef, handlers, isEmpty, undo, clear, toBlob } = useDrawing(
+  const [paper, setPaper] = useState<CanvasSize | null>(initialSize ?? null);
+  const { canvasRef, handlers, isEmpty, canUndo, undo, clear, toBlob } = useDrawing(
     brush,
     paper ?? UNMEASURED,
+    background,
   );
   const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const active = useRef(true);
+
+  useEffect(() => {
+    active.current = open;
+    return () => {
+      active.current = false;
+    };
+  }, [open]);
+
+  const cancel = () => {
+    active.current = false;
+    onCancel();
+  };
 
   const measure = useCallback((area: HTMLDivElement | null) => {
     const rect = area?.getBoundingClientRect();
@@ -51,22 +147,27 @@ export function DrawPad({ onDone, onCancel }: DrawPadProps) {
 
   const finish = async () => {
     setSaving(true);
+    setFailed(false);
     try {
-      onDone(await toBlob());
+      const blob = await toBlob();
+      if (active.current) onDone(blob);
+    } catch {
+      if (active.current) setFailed(true);
     } finally {
-      setSaving(false);
+      if (active.current) setSaving(false);
     }
   };
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col gap-2.5 px-3 pt-safe pb-safe sm:px-4">
       <header className="flex items-center justify-between gap-3">
-        <IconButton label={t('draw.cancel')} icon={<X />} onClick={onCancel} />
+        <IconButton label={t('draw.cancel')} icon={<X />} onClick={cancel} />
         <h2 className="text-2xl font-extrabold">{t('draw.title')}</h2>
-        <Button icon={<Check />} disabled={isEmpty || saving} onClick={finish}>
+        <Button icon={<Check />} disabled={!paper || isEmpty || saving} onClick={finish}>
           {t('draw.done')}
         </Button>
       </header>
+      {failed && <Alert tone="danger">{t('draw.saveError')}</Alert>}
 
       <div
         ref={measure}
@@ -103,7 +204,8 @@ export function DrawPad({ onDone, onCancel }: DrawPadProps) {
       <DrawToolbar
         brush={brush}
         onBrushChange={setBrush}
-        canUndo={!isEmpty}
+        canUndo={canUndo}
+        canClear={!isEmpty}
         onUndo={undo}
         onClear={clear}
       />
