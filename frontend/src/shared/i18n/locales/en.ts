@@ -19,6 +19,26 @@ export const en = {
   'guide.step.result':
     'Wait for it to finish, view the animation, then save, share, or revisit it.',
   'guide.start': 'Start creating',
+  'guide.example.title': 'Example: make the Person jump',
+  'guide.example.intro':
+    'Try the coloured Person sample shown below. To use your own drawing, choose Draw now instead of Sample drawings, finish drawing, then continue from step 2. Screenshots show the Vietnamese interface.',
+  'guide.example.open': 'Open full-size screenshot for step {step}',
+  'guide.example.sample.title': 'Pick the Person sample',
+  'guide.example.sample.body': 'In Create, open Sample drawings, keep Coloured selected, then choose Person.',
+  'guide.example.sample.alt': 'Sample drawings picker with Coloured selected and Person in the top-left corner.',
+  'guide.example.drawing.title': 'Check your drawing',
+  'guide.example.drawing.body': 'The Person drawing is now selected. Use Draw on image to make changes, then tap Continue.',
+  'guide.example.drawing.alt': 'The selected Person sample on the Drawing screen, ready to continue.',
+  'guide.example.motion.title': 'Choose Jump',
+  'guide.example.motion.body': 'Choose Person / character and Jump. Leave Colour it in first off to keep the sample colours, then tap Make the magic!',
+  'guide.example.motion.alt': 'Motion screen with Person / character, Jump, and automatic colouring turned off.',
+  'guide.example.processing.title': 'Wait for processing',
+  'guide.example.processing.body': 'The drawing is sent for processing. Follow the progress and wait for the result screen to open.',
+  'guide.example.processing.alt': 'The app processing the Person drawing and showing progress.',
+  'guide.example.result.title': 'View the result',
+  'guide.example.result.body': 'When Tada! appears, watch the animation, compare it with the original, or download it. The creation is also saved in Library.',
+  'guide.example.result.alt': 'The Tada! screen showing an animation of the same Person sample.',
+  'guide.example.note': 'Captured from a real run using the offline demo animator: the drawing wobbles and bounces rather than using AI-generated motion. Results and waiting times with AI services may differ.',
   'guide.sourceTitle': 'Add a drawing',
   'guide.source1':
     'Use Take photo, Live camera, Pick photo, Draw now, or Sample drawings to pick one of 18 ready-made drawings. Samples also work as a second drawing. Live camera needs permission and HTTPS or localhost.',
@@ -35,7 +55,8 @@ export const en = {
   'guide.extrasTitle': 'Creative tools',
   'guide.extras1':
     'Samples have uncoloured and coloured versions. After picking an image, use Draw on image to erase or add details. The sketchpad includes a pen, eraser, colours, sizes, undo and shapes; tap Done to save or close to discard changes.',
-  'guide.extras2': 'Turn on Colour it in first to fill closed regions before animation.',
+  'guide.extras2':
+    'Turn on Colour it in first to automatically fill closed regions. To keep a Coloured sample’s original colours, leave it off. Image processing preserves existing colours, but the video model may not reproduce every colour exactly.',
   'guide.extras3': 'While waiting, play Guess my drawing and follow the steps in the AI pipeline.',
   'guide.resultTitle': 'View and save your result',
   'guide.result1':

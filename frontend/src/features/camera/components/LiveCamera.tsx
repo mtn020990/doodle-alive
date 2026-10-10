@@ -5,14 +5,15 @@ import { Alert, Button, IconButton } from '@/shared/ui';
 import { useSteadyCamera, type CameraHint } from '../hooks/useSteadyCamera';
 
 interface LiveCameraProps {
+  open: boolean;
   onPhoto: (photo: File) => void;
   onCancel: () => void;
 }
 
 /** Full-screen viewfinder with a paper guide; snaps by itself when held still. */
-export function LiveCamera({ onPhoto, onCancel }: LiveCameraProps) {
+export function LiveCamera({ open, onPhoto, onCancel }: LiveCameraProps) {
   const { t } = useI18n();
-  const { videoRef, hint, snap } = useSteadyCamera(onPhoto);
+  const { videoRef, hint, snap } = useSteadyCamera(onPhoto, open);
 
   const hintText = (h: CameraHint) => {
     switch (h.kind) {

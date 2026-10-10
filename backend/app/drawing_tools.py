@@ -65,12 +65,12 @@ def _warp(rgb: np.ndarray, corners: np.ndarray) -> np.ndarray:
 
 
 def _whiten(rgb: np.ndarray) -> np.ndarray:
-    """Divide out the (blurred) paper colour per channel: shadows and grey light go, ink stays."""
-    out = []
-    for plane in cv2.split(rgb):
-        background = cv2.medianBlur(cv2.dilate(plane, np.ones((7, 7), np.uint8)), 21)
-        out.append(cv2.divide(plane, background, scale=255))
-    return cv2.merge(out)
+    """Even out paper lighting without removing the hue and saturation of coloured drawings."""
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    value = hsv[:, :, 2]
+    background = cv2.medianBlur(cv2.dilate(value, np.ones((7, 7), np.uint8)), 21)
+    hsv[:, :, 2] = cv2.divide(value, background, scale=255)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
 
 def auto_paint(src: Path, dst: Path, seed: int | None = None) -> int:

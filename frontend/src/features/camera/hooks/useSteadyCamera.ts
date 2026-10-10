@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { canvasToBlob } from '@/shared/lib/image';
 
 const CHECK_MS = 200;
@@ -23,34 +23,52 @@ export const liveCameraSupported = () =>
  * greyscale frames, and when they stop changing for ~1.6 s, takes the photo.
  * The server then finds the sheet, flattens it and whitens shadows.
  */
-export function useSteadyCamera(onPhoto: (photo: File) => void) {
+export function useSteadyCamera(onPhoto: (photo: File) => void, open: boolean) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hint, setHint] = useState<CameraHint>({ kind: 'starting' });
   const done = useRef(false);
+  const captureId = useRef(0);
   const onPhotoRef = useRef(onPhoto);
   useEffect(() => {
     onPhotoRef.current = onPhoto;
   });
 
+  useLayoutEffect(() => {
+    done.current = !open;
+    captureId.current += 1;
+    return () => {
+      done.current = true;
+      captureId.current += 1;
+    };
+  }, [open]);
+
   const snap = useCallback(() => {
     const video = videoRef.current;
-    if (!video?.videoWidth || done.current) return;
+    if (!open || !video?.videoWidth || done.current) return;
     done.current = true;
+    const currentCapture = ++captureId.current;
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d')!.drawImage(video, 0, 0);
     setHint({ kind: 'got' });
     canvasToBlob(canvas, 'image/jpeg', 0.92)
-      .then((blob) => onPhotoRef.current(new File([blob], 'camera.jpg', { type: 'image/jpeg' })))
+      .then((blob) => {
+        if (currentCapture === captureId.current) {
+          onPhotoRef.current(new File([blob], 'camera.jpg', { type: 'image/jpeg' }));
+        }
+      })
       .catch(() => {
         // Encoding failed (e.g. low memory on a phone): let the person try again.
-        done.current = false;
-        setHint({ kind: 'fit' });
+        if (currentCapture === captureId.current) {
+          done.current = false;
+          setHint({ kind: 'fit' });
+        }
       });
-  }, []);
+  }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
     let cancelled = false;
@@ -116,7 +134,7 @@ export function useSteadyCamera(onPhoto: (photo: File) => void) {
       clearInterval(timer);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [snap]);
+  }, [open, snap]);
 
   return { videoRef, hint, snap };
 }

@@ -242,6 +242,7 @@ export function SourceStep({ image, second, onPick, onPickSecond, onNext }: Sour
 
       <Sheet open={camera} onClose={() => setCamera(false)} label={t('camera.title')}>
         <LiveCamera
+          open={camera}
           onCancel={() => setCamera(false)}
           onPhoto={(photo) => {
             setCamera(false);

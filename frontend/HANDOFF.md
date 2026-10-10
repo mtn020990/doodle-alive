@@ -144,7 +144,7 @@ The job JSON is add-only (see `../docs/HANDOFF.md`). Types live in `shared/api/t
 ## 8. Not verified yet / known gaps
 
 - **Not tested yet:**
-  - A real phone, especially Share on iPhone (the file is prefetched, then `navigator.share({ files })`) and the live camera's auto-snap. Headless tests only covered "Snap now", because the fake camera is never steady.
+  - A real phone, especially the native share sheet (Share now sends the result link; Save downloads the media file) and the live camera's auto-snap. Headless tests only covered "Snap now", because the fake camera is never steady.
   - Real AI: Gemini/Claude, Hugging Face video, AnimatedDrawings. With the mock animator, the backend returns no `guesses` or `sound`, so the game and sound were only tested with injected data.
   - Docker build and Azure deploy were never run after these changes.
 - **Share and live camera need HTTPS (or localhost).** On `http://<laptop-ip>:8000` the Share button is hidden and the live camera tile is not shown; that is expected.

@@ -102,13 +102,17 @@ export async function pollJob(
 function sleep(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason);
-    const timer = setTimeout(resolve, ms);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
     signal?.addEventListener(
       'abort',
-      () => {
-        clearTimeout(timer);
-        reject(signal.reason);
-      },
+      onAbort,
       { once: true },
     );
   });

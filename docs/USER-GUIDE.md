@@ -60,7 +60,7 @@ No drawing ready? Tap **Sample drawings** (**Hình mẫu**) to choose from 18 dr
 
 You can reopen **Sample drawings** to replace the main image, or use the sample icon beside **Add a second drawing** to choose a second sample. Closing the picker without choosing leaves your drawings unchanged.
 
-Choose **Uncoloured** (**Không tô màu**) for black outlines on white paper, or **Coloured** (**Có tô màu**) for the coloured version. The previews and the selected image use that version; this is separate from the backend's **Colour it in first** option.
+Choose **Uncoloured** (**Không tô màu**) for black outlines on white paper, or **Coloured** (**Có tô màu**) for the coloured version. The previews and the selected image use that version; this is separate from the backend's **Colour it in first** option. Image cleanup preserves existing colours. If you want the selected sample's colours to stay as-is, leave **Colour it in first** off; the video model may still interpret some colours differently.
 
 After selecting a sample, tap **Draw on image** (**Vẽ tiếp**) to open it in the sketchpad. Use the pen, colours and shapes to add details, or the eraser to remove parts of the original image. **Undo** reverses your latest stroke or erase; **Clear** clears the whole paper and can also be undone. Tap **Done** to save the edited image; closing or pressing Escape discards the changes. You can reopen the editor to continue from your saved image. The pencil beside a selected second drawing edits that drawing as well. **Draw now** still starts a new blank drawing.
 
@@ -68,7 +68,7 @@ After selecting a sample, tap **Draw on image** (**Vẽ tiếp**) to open it in 
 After the first photo, tap **Add a second drawing** (or its pencil to draw it), for example a dog on one sheet and a ball on another. The two drawings are put side by side, and the AI makes **one video where they meet**, for example the dog runs over and catches the ball. Two drawings always become an AI video (**Anything else**). Tap its **✕** to remove it.
 
 ### Colour it in first
-Turn on this switch under **Extras** (step 2) to fill every **closed shape** of the drawing with bright crayon colours before animating. The lines stay exactly as drawn. It works best when shapes are fully closed, with no gaps in the outline. It runs on our server with no AI and no limits.
+Turn on this switch under **Extras** (step 2) to fill every **closed shape** of the drawing with bright crayon colours before animating. The lines stay exactly as drawn. It works best when shapes are fully closed, with no gaps in the outline. It runs on our server with no AI and no limits. Because this option can change the colours inside closed shapes, leave it off when you want to keep a coloured sample's original palette. The later video-generation model may not preserve every colour exactly.
 
 ---
 
@@ -129,7 +129,7 @@ It's made for presenting: talk the audience through the boxes while a video is b
 The result plays a **sound effect** (whoosh, boing, sparkle, splash, roar or beep) and **background music** in a mood the AI picked (happy, calm, spooky or epic). It's all made in the browser, so nothing downloads. Tap **Sound on / Sound off** to toggle. On iPhone, also check that the silent switch is off.
 
 ### Save / Share / Compare / New drawing
-**Save** downloads or opens the GIF or MP4; on a phone you can also long-press it to save. **Share** opens the phone's share sheet (it needs HTTPS, so it shows on the Azure site but not on a `http://<laptop-ip>` address). **Compare** shows a slider between the original drawing and the animation. **New drawing** resets everything.
+**Save** downloads or opens the GIF or MP4; on a phone you can also long-press it to save. **Share** sends a link through the phone's share sheet (it needs HTTPS, so it shows on the Azure site but not on a `http://<laptop-ip>` address). Use **Save** when you need to send the media file itself. **Compare** shows a slider between the original drawing and the animation. **New drawing** resets everything.
 
 ### Library and language
 Every result is kept in **Library** (bottom bar) on that phone, to watch again, save or delete. The **VI / EN** switch at the top changes the language; the AI's own texts (guesses, flow chart) stay in English.

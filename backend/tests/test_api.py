@@ -561,6 +561,23 @@ def test_paper_is_found_and_straightened():
     assert corner > 200  # the dark table is cropped away and the paper is white
 
 
+def test_clean_photo_preserves_coloured_drawing():
+    import pytest
+
+    pytest.importorskip("cv2")
+    from app.preprocess import clean_photo
+
+    image = Image.new("RGB", (200, 200), "white")
+    ImageDraw.Draw(image).rectangle((40, 40, 160, 160), fill=(248, 181, 160))
+    with tempfile.TemporaryDirectory() as folder:
+        source, output = Path(folder) / "in.png", Path(folder) / "out.png"
+        image.save(source)
+        clean_photo(source, output)
+        red, green, blue = Image.open(output).convert("RGB").getpixel((100, 100))
+        assert red > green > blue
+        assert red - blue > 50
+
+
 def test_auto_paint_fills_closed_shapes():
     import pytest
 
