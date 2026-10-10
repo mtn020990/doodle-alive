@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AdminPage } from '@/features/admin';
 import { CreateFlow } from '@/features/create';
+import { GuidePage } from '@/features/guide';
 import { LibraryPage } from '@/features/library';
 import { sound } from '@/shared/sound';
 import { useHash } from './hooks/useHash';
@@ -26,6 +27,9 @@ export function App() {
         </div>
         <div hidden={admin || tab !== 'library'}>
           <LibraryPage onCreate={() => switchTab('create')} />
+        </div>
+        <div hidden={admin || tab !== 'guide'}>
+          <GuidePage onCreate={() => switchTab('create')} />
         </div>
       </AppShell>
     </Providers>

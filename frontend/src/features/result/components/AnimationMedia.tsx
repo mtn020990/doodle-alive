@@ -23,8 +23,10 @@ export function AnimationMedia({ src, isVideo, alt, controls = true, fill }: Ani
   // The size limit sits on the image itself: object-contain then shrinks the whole
   // animation to fit, instead of a wrapper cropping it.
   const media = cn(
-    'block w-full object-contain transition-opacity duration-300',
-    fill ? 'h-full' : cn('mx-auto', SCREEN_FIT),
+    'block object-contain transition-opacity duration-300',
+    fill
+      ? 'h-full w-full'
+      : cn('mx-auto', SCREEN_FIT, isVideo ? 'h-auto w-auto max-w-full' : 'w-full'),
     status === 'ready' ? 'opacity-100' : 'opacity-0',
   );
   const events = { onError: () => setStatus('missing') };
